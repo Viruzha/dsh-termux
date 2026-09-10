@@ -1,0 +1,7 @@
+{
+  "name": "@vscode/ripgrep-android-arm64",
+  "version": "1.18.0",
+  "private": true,
+  "description": "Local shim satisfying @vscode/ripgrep platform resolution on Termux/Android. bin/rg is a symlink to the Termux-native ripgrep.",
+  "license": "MIT"
+}

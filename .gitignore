@@ -1,0 +1,13 @@
+# ── 绝不入库：密钥与个人数据 ──────────────────────────────
+config/credentials.yaml
+config/sessions/
+config/attachments/
+data/
+
+# ── 生成物与备份 ─────────────────────────────────────────
+*.tar.zst
+*.zst
+*.orig
+*.bak
+*.log
+.DS_Store
