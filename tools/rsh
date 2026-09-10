@@ -1,0 +1,47 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# rsh —— 以 Android shell(uid 2000) 身份执行命令，走 Shizuku，不依赖 adb / 无线调试 / WiFi。
+#
+#   rsh                        交互式 shell
+#   rsh id                     执行一条命令
+#   rsh pm list packages -3    多个参数会拼成一条命令
+#   rsh 'a; b'                 需要多条时请自行加引号
+#   echo 'cmd1; cmd2' | rsh    从标准输入读
+#
+# 前置：先跑 tools/setup-shizuku-rish.sh 安装 ~/.shizuku/rish
+# 用途：pm / dumpsys / settings / screencap / input / am / wm / logcat 等需要 shell 身份的操作。
+#
+# 环境变量：RSH_RETRIES（默认 6）—— Shizuku 应用进程被系统回收时 rish 会报
+# "Request timeout"，通常几秒后自愈，所以这里做退避重试。
+set -uo pipefail
+
+RISH="${HOME}/.shizuku/rish"
+RETRIES="${RSH_RETRIES:-6}"
+
+if [ ! -x "$RISH" ]; then
+  printf '缺少 %s\n请先运行： ~/dsh-termux/tools/setup-shizuku-rish.sh\n' "$RISH" >&2
+  exit 1
+fi
+
+# 无参数：交给 rish 本身（有 TTY 时是交互式 shell，否则读 stdin）
+if [ "$#" -eq 0 ]; then exec "$RISH"; fi
+
+# rish 的输出可能随机落到 stdout 或 stderr（Shizuku 侧的竞态），必须合并两路，
+# 否则 `rsh ... | grep x` 会随机拿到空结果。
+CMD="$*"
+attempt=0
+while :; do
+  attempt=$((attempt + 1))
+  out="$(printf '%s\n' "$CMD" | "$RISH" 2>&1)"; rc=$?
+  case "$out" in
+    *"Request timeout"*|*"may be blocked by your system"*)
+      if [ "$attempt" -lt "$RETRIES" ]; then
+        printf 'rish 超时，%s/%s 次重试…\n' "$attempt" "$RETRIES" >&2
+        sleep 3; continue
+      fi
+      printf 'rish 连续 %s 次超时。多半是 Shizuku 应用进程被系统回收了。\n' "$RETRIES" >&2
+      printf '处理：打开一次 Shizuku 应用；并给 Shizuku 和 Termux 都关闭电池优化。\n' >&2
+      ;;
+  esac
+  printf '%s\n' "$out"
+  exit "$rc"
+done

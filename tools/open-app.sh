@@ -10,22 +10,35 @@
 #   ./open-app.sh --current            看当前前台是哪个应用
 #   ./open-app.sh --url <网址>         用浏览器打开网址（优先 Chrome）
 #
-# 走 adb（shell 身份，最可靠）。没连上会提示先跑 adb-connect-self.sh。
+# 需要 shell(uid 2000) 身份：优先走 rish（Shizuku，免 adb/WiFi），失败自动回退无线 adb。
 # ===========================================================================
 set -uo pipefail
 
 ADB_TARGET=""
+USE_RSH=0
+SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
+RSH_BIN="$SELF_DIR/rsh"
+
 connect_hint() {
-  echo "✗ 没有已连接的 adb 设备（打开 App 需要 shell 身份）" >&2
-  echo "  先执行： $(dirname "$0")/adb-connect-self.sh" >&2
-  echo "  首次需配对： $(dirname "$0")/adb-connect-self.sh --pair <配对端口> <配对码>" >&2
+  echo "✗ 两条通道都不可用（打开 App 需要 shell 身份）" >&2
+  echo "  首选： $SELF_DIR/setup-shizuku-rish.sh      走 Shizuku，不需要 adb/WiFi" >&2
+  echo "  兜底： $SELF_DIR/adb-connect-self.sh        无线调试，需要 WiFi" >&2
+  echo "  配对失效： $SELF_DIR/adb-connect-self.sh --pair <配对端口> <配对码>" >&2
   exit 1
 }
 pick_device() {
+  # 优先 rish：不依赖 adb / 无线调试 / WiFi
+  if [ -x "$HOME/.shizuku/rish" ] && [ -x "$RSH_BIN" ]; then
+    if timeout 25 "$RSH_BIN" 'id' 2>/dev/null | grep -q 'uid=2000'; then USE_RSH=1; return 0; fi
+    echo "! rish 通道不可用，回退到无线 adb（可跑 setup-shizuku-rish.sh 修复）" >&2
+  fi
   ADB_TARGET="$(adb devices 2>/dev/null | awk 'NR>1 && $2=="device" {print $1; exit}')"
   [ -n "$ADB_TARGET" ] || connect_hint
 }
-sh_() { adb -s "$ADB_TARGET" shell "$@" 2>/dev/null; }
+sh_() {
+  if [ "$USE_RSH" = 1 ]; then "$RSH_BIN" "$*" 2>/dev/null
+  else adb -s "$ADB_TARGET" shell "$@" 2>/dev/null; fi
+}
 
 # --- 中文/英文别名表（按本机已装应用整理，可自行增删）---
 ALIASES='

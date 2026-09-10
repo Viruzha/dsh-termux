@@ -19,7 +19,10 @@ dsh-termux/
 │   ├── attachment-android.sh     附件库 fsync 走查 + 硬链接回退
 │   └── ripgrep-android.sh        glob/grep 的 ripgrep 垫片
 ├── tools/
-│   ├── adb-connect-self.sh       无线调试自连（端口随机，自动扫描）
+│   ├── setup-shizuku-rish.sh     安装/修复 rish（Shizuku 通道，免 adb/WiFi）
+│   ├── rsh                       以 shell(uid 2000) 执行命令（自动重试 + 流合并）
+│   ├── apk-install.sh            免 adb 安装/卸载 APK
+│   ├── adb-connect-self.sh       无线调试自连（兜底通道；端口随机，自动扫描）
 │   ├── open-app.sh               打开 App / 打开网址（中文别名 + --url）
 │   ├── setup-github.sh           配置 git + GitHub SSH（幂等）
 │   └── probe-termux-api.sh       Termux:API 能力探针
@@ -58,8 +61,43 @@ tools/open-app.sh --search 腾讯    # 按包名搜索
 tools/open-app.sh --current       # 看当前前台是哪个应用
 ```
 
-打开 App 走 `adb shell`（shell 身份），所以需要先连着无线调试；没连上会提示
-先跑 `tools/adb-connect-self.sh`。别名表在脚本顶部，可自行增删。
+打开 App 需要 shell(uid 2000) 身份：优先走 **rish 通道**（不需要 adb / 无线调试 / WiFi），
+不可用时自动回退无线 adb。别名表在脚本顶部，可自行增删。
+
+## 两条 shell 通道
+
+非 root 设备上，拿到 `shell`(uid 2000) 只有两条路。本包两条都支持，**默认优先 rish**。
+
+| 通道 | 前提 | 特点 |
+|---|---|---|
+| **rish（Shizuku）** | Shizuku 已装且运行 | **不需要 adb / 无线调试 / WiFi**；覆盖几乎全部操作 |
+| **无线 adb** | 开发者选项开无线调试（需 WiFi） | 兜底；端口随机、WiFi 一断就失效 |
+
+```bash
+tools/setup-shizuku-rish.sh --check                        # 退出码 0 → rish 可用
+tools/rsh id                                               # 以 shell 身份执行命令
+tools/rsh 'dumpsys window | grep -m1 mCurrentFocus'
+tools/rsh 'screencap -p /sdcard/Download/shot.png'
+tools/apk-install.sh app.apk                               # 免 adb 安装
+```
+
+**为什么 rish 不需要网络**：`shizuku_server` 是已被 init 收养（PPID=1）的常驻进程，
+只持有 UNIX 域套接字 —— `/proc/net/tcp`、`tcp6`、`udp` 里它的套接字数实测为 **0**。
+实测关掉 WiFi、甚至 adb 完全断开时，`rsh` 依旧返回 `uid=2000(shell)`。
+
+**两个已知坑**（`tools/rsh` 已内建处理）：
+
+- rish 的输出会**随机整批**落到 stdout 或 stderr，必须合并两路，
+  否则 `rsh ... | grep x` 会随机拿到空结果；
+- Shizuku **应用进程**被系统回收后 rish 报 `Request timeout`，通常几秒自愈，`rsh` 会退避重试。
+  若持续超时，**打开一次 Shizuku 应用**，并给 **Shizuku 和 Termux 都关闭电池优化**（硬要求）。
+
+**无 root 时重启手机后** Shizuku 不会自动恢复，需重新引导一次
+（`bootstrap.sh` 的 `10/11 shell 通道` 步骤会尝试自动完成）。
+
+**安装 APK** 有个 Android 的硬约束：`pm install` 由 system_server 执行，SELinux 不允许它读
+`/sdcard`(FUSE)，APK 必须位于 `/data/local/tmp/`；而 Termux 写不进那里 —— `tools/apk-install.sh`
+用 rish 的命令通道把 base64 搬过去（逐字节校验 md5）。大包请改用 `adb install`。
 
 ## 全局技能（Skills）
 
@@ -70,7 +108,9 @@ DSH 的技能 = 带 YAML frontmatter 的 Markdown 指令集，放进用户级根
 <工作区>/.dsh/skills/<name>/SKILL.md      # 项目级：只有该项目可见
 ```
 
-本包自带一个：**`skills/android-device/`**（用 adb 操作手机：开 App、看前台、截图读图、模拟输入、文件互传、环境自检）。`bootstrap.sh` 会把它装到 `~/.dsh/skills/`。
+本包自带一个：**`skills/android-device/`**（操作手机：开 App、看前台、截图读图、模拟输入、
+安装/卸载 APK、文件互传，以及 rish 与无线 adb 两条通道的选择与自检）。
+`bootstrap.sh` 会把它装到 `~/.dsh/skills/`。
 
 - `skill-filesystem` 带 watcher：**新增或修改技能后即时生效，无需重启 DSH**。
 - 想加技能：在 `~/dsh-termux/skills/` 下建目录写 `SKILL.md`，重跑 `./bootstrap.sh`；也可以直接放进 `~/.dsh/skills/`。

@@ -48,7 +48,7 @@ have() { command -v "$1" >/dev/null 2>&1; }
 # 0. 环境前置检查
 # ===========================================================================
 cmd_install() {
-step "0/10 环境前置检查"
+step "0/11 环境前置检查"
 case "$PREFIX" in
   *com.termux*) ok "运行在 Termux ($PREFIX)" ;;
   *) bad "看起来不是 Termux 环境（PREFIX=$PREFIX）" ;;
@@ -74,7 +74,7 @@ fi
 # ===========================================================================
 # 1. Termux 软件包
 # ===========================================================================
-step "1/10 Termux 软件包"
+step "1/11 Termux 软件包"
 # "pkg名:检测用的命令"
 PKGS=(
   "nodejs:node" "python:python3" "ripgrep:rg" "android-tools:adb"
@@ -100,7 +100,7 @@ fi
 # ===========================================================================
 # 2. pnpm（必须是纯 JS 的 10.x；11+ 依赖无 android 构建的原生二进制）
 # ===========================================================================
-step "2/10 pnpm"
+step "2/11 pnpm"
 PNPM_OK=0
 if have pnpm; then
   PV="$(pnpm --version 2>/dev/null || echo 0)"
@@ -125,7 +125,7 @@ fi
 # ===========================================================================
 # 3. dsh 本体
 # ===========================================================================
-step "3/10 dsh 本体"
+step "3/11 dsh 本体"
 installed_dsh() { [ -f "$DSH_ROOT/package.json" ] && node -e "process.stdout.write(require('$DSH_ROOT/package.json').version)" 2>/dev/null; }
 CUR_DSH="$(installed_dsh || true)"
 if [ "$CUR_DSH" = "$DSH_VERSION" ]; then
@@ -144,7 +144,7 @@ fi
 # ===========================================================================
 # 4. sharp（图像规范化；Android 上必须走 wasm32 变体）
 # ===========================================================================
-step "4/10 sharp / sharp-wasm32"
+step "4/11 sharp / sharp-wasm32"
 need_sharp=0
 [ -f "$GLOBAL_NM/sharp/package.json" ] && ok "sharp $(node -e "process.stdout.write(require('$GLOBAL_NM/sharp/package.json').version)" 2>/dev/null)" || { warn "sharp 缺失"; need_sharp=1; }
 [ -f "$GLOBAL_NM/@img/sharp-wasm32/package.json" ] && ok "@img/sharp-wasm32 就位（Android 靠它加载）" || { warn "@img/sharp-wasm32 缺失"; need_sharp=1; }
@@ -160,7 +160,7 @@ fi
 # ===========================================================================
 # 5. Android 原生产物（npm 给不了，随包携带）
 # ===========================================================================
-step "5/10 Android 原生产物"
+step "5/11 Android 原生产物"
 install_asset() { # $1=源文件 $2=目标 $3=期望sha $4=名字
   local src="$1" dst="$2" sha="$3" name="$4"
   if [ -f "$dst" ]; then
@@ -186,7 +186,7 @@ fi
 # ===========================================================================
 # 6. ripgrep 垫片（让 DSH 的 glob/grep 能找到 Android 原生 rg）
 # ===========================================================================
-step "6/10 ripgrep 垫片"
+step "6/11 ripgrep 垫片"
 if [ -x "$SELF_DIR/patches/ripgrep-android.sh" ]; then
   # 注意：Termux 下 /tmp 不可写，日志必须落在 $TMPDIR（= $PREFIX/tmp）
   RLOG="${TMPDIR:-$PREFIX/tmp}/ripgrep-patch.log"
@@ -203,7 +203,7 @@ fi
 # ===========================================================================
 # 7. Android 补丁（硬链接被禁 / 祖先目录不可读）
 # ===========================================================================
-step "7/10 Android 补丁"
+step "7/11 Android 补丁"
 for p in session-eacces attachment-android; do
   script="$SELF_DIR/patches/$p.sh"
   if [ ! -x "$script" ]; then bad "缺少 patches/$p.sh"; continue; fi
@@ -214,7 +214,7 @@ done
 # ===========================================================================
 # 8. 配置恢复（只在目标缺失时写入，除非 --force-config）
 # ===========================================================================
-step "8/10 配置"
+step "8/11 配置"
 FORCE_CONFIG="${FORCE_CONFIG:-0}"
 restore_file() { # $1=payload 内相对路径 $2=目标绝对路径
   local src="$SELF_DIR/$1" dst="$2"
@@ -254,7 +254,7 @@ fi
 # ===========================================================================
 # 9. 管理脚本
 # ===========================================================================
-step "9/10 管理脚本"
+step "9/11 管理脚本"
 if [ -f "$SELF_DIR/manage.sh" ]; then
   if [ -f "$HOME/dsh-web.sh" ] && [ "${FORCE_MANAGE:-0}" != "1" ]; then
     if cmp -s "$SELF_DIR/manage.sh" "$HOME/dsh-web.sh"; then ok "~/dsh-web.sh 已是最新"
@@ -268,9 +268,24 @@ else
 fi
 
 # ===========================================================================
-# 10. 总检
+# 10. shell 通道（Shizuku rish：不依赖 adb / 无线调试 / WiFi）
 # ===========================================================================
-step "10/10 总检"
+step "10/11 shell 通道"
+if [ -x "$SELF_DIR/tools/setup-shizuku-rish.sh" ]; then
+  if out="$("$SELF_DIR/tools/setup-shizuku-rish.sh" --quiet 2>&1)"; then
+    ok "rish 就绪（uid 2000，免 adb/WiFi）"
+  else
+    warn "rish 未就绪：$(printf '%s' "$out" | tail -1)"
+    dim "需要 Shizuku 已安装并运行；就绪后 rsh 不再需要 adb 与 WiFi"
+  fi
+else
+  dim "包内没有 tools/setup-shizuku-rish.sh，跳过"
+fi
+
+# ===========================================================================
+# 11. 总检
+# ===========================================================================
+step "11/11 总检"
 check_only || true   # 直接调用，避免递归
 
 printf '\n%s===== 结果 =====%s\n' "$B" "$N"
@@ -311,7 +326,8 @@ check_only() {
   chk "附件硬链接补丁" "grep -q 'hard links are denied' '$NM/@deepseek-ai/dsh-attachment-local/lib/index.js'"
   chk "附件 fsync 补丁" "grep -q 'ancestor directory is not openable' '$NM/@deepseek-ai/dsh-attachment-local/lib/index.js'"
   printf '%s--- 可选能力 ---%s\n' "$B" "$N"
-  chk "adb（无线调试自连）" "adb devices | grep -q device"
+  chk "shell 通道 rish（免 adb/WiFi）" "'$SELF_DIR/tools/setup-shizuku-rish.sh' --check"
+  chk "adb（无线调试自连，兜底）" "adb devices | grep -q device"
   chk "termux-api CLI" "command -v termux-battery-status"
   chk "管理脚本 ~/dsh-web.sh" "[ -x '$HOME/dsh-web.sh' ]"
   chk "全局技能 android-device" "[ -f '$DSH_HOME/skills/android-device/SKILL.md' ]"
