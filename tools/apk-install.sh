@@ -52,19 +52,30 @@ SIZE="$(stat -c%s "$APK")"
 info "APK: $APK（$SIZE 字节，md5 $LOCAL_MD5）"
 
 info "经 rish 命令通道搬运到 $REMOTE ..."
-{
-  printf 'base64 -d > %s <<"ZZEOF"\n' "$REMOTE"
-  base64 -w0 "$APK"
-  printf '\nZZEOF\n'
-  printf 'md5sum %s\n' "$REMOTE"
-} | timeout 600 "$RISH" >/dev/null 2>&1 || true
+# rish 会因 Shizuku 应用进程被回收而中途超时，所以搬运必须重试并逐次校验 md5
+REMOTE_MD5=""
+ATTEMPT=0
+MAX_ATTEMPT="${APK_INSTALL_RETRIES:-5}"
+while [ "$ATTEMPT" -lt "$MAX_ATTEMPT" ]; do
+  ATTEMPT=$((ATTEMPT + 1))
+  {
+    printf 'base64 -d > %s <<"ZZEOF"\n' "$REMOTE"
+    base64 -w0 "$APK"
+    printf '\nZZEOF\n'
+  } | timeout 600 "$RISH" >/dev/null 2>&1 || true
 
-REMOTE_MD5="$(timeout 60 "$RSH" "md5sum $REMOTE" 2>/dev/null | awk '{print $1}' | tail -1)"
+  REMOTE_MD5="$(timeout 90 "$RSH" "md5sum $REMOTE 2>/dev/null" 2>/dev/null | grep -oE '[0-9a-f]{32}' | head -1)"
+  [ "$REMOTE_MD5" = "$LOCAL_MD5" ] && break
+  printf '  第 %s/%s 次未通过，重试…\n' "$ATTEMPT" "$MAX_ATTEMPT"
+  sleep 3
+done
+
 [ "$REMOTE_MD5" = "$LOCAL_MD5" ] || {
-  timeout 60 "$RSH" "rm -f $REMOTE" >/dev/null 2>&1
-  die "搬运校验失败：本地 $LOCAL_MD5 ≠ 远端 ${REMOTE_MD5:-空}"
+  timeout 90 "$RSH" "rm -f $REMOTE" >/dev/null 2>&1
+  die "搬运校验失败（重试 $MAX_ATTEMPT 次）：本地 $LOCAL_MD5 ≠ 远端 ${REMOTE_MD5:-空}。
+ 多半是 Shizuku 应用进程被回收 —— 打开一次 Shizuku 应用，并给它和 Termux 关掉电池优化。"
 }
-info "搬运校验通过"
+info "搬运校验通过（第 $ATTEMPT 次尝试）"
 
 if [ "$DRYRUN" = 1 ]; then
   timeout 60 "$RSH" "rm -f $REMOTE" >/dev/null 2>&1
