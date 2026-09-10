@@ -27,6 +27,21 @@ termux-setup-storage
 
 ## 三、新手机：一键恢复
 
+### 方式 A（推荐）：从 GitHub 克隆
+
+```bash
+pkg install -y git
+# 先配好 GitHub SSH（见第六节），然后：
+git clone git@github.com:Viruzha/dsh-termux.git
+cd dsh-termux && ./bootstrap.sh
+```
+
+好处：不用手动传文件，且随时 `git pull` 拿到最新脚本与资产。
+
+### 方式 B：离线 tar 包
+
+把 `dsh-termux-bundle.tar.zst` 传到新手机后：
+
 把 `dsh-termux-bundle.tar.zst` 放到新手机（下载目录即可），然后：
 
 ```bash

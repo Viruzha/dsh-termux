@@ -26,6 +26,18 @@ dsh-termux/
 └── config/                 配置快照（不含密钥，除非 bundle --with-secrets）
 ```
 
+## 获取
+
+```bash
+# 从仓库（推荐）
+git clone git@github.com:Viruzha/dsh-termux.git && cd dsh-termux && ./bootstrap.sh
+
+# 或离线包
+tar --zstd -xf dsh-termux-bundle.tar.zst && cd dsh-termux && ./bootstrap.sh
+```
+
+仓库：https://github.com/Viruzha/dsh-termux（私有）
+
 ## 日常用法
 
 ```bash
