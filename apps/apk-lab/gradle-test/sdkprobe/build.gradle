@@ -1,0 +1,23 @@
+buildscript {
+    repositories { google(); mavenCentral() }
+    dependencies { classpath 'com.android.tools:sdklib:32.4.0' }
+}
+
+tasks.register("probeSdk") {
+    doLast {
+        def sdkDir = new File("/data/data/com.termux/files/home/dsh-workspace/apk-lab/gradle-test/sdk")
+        def logger = new com.android.utils.StdLogger(com.android.utils.StdLogger.Level.VERBOSE)
+        def pi = new com.android.sdklib.repository.LoggerProgressIndicatorWrapper(logger)
+        def handler = com.android.sdklib.repository.AndroidSdkHandler.getInstance(
+                com.android.prefs.AndroidLocationsSingleton.INSTANCE, sdkDir.toPath())
+        def repo = handler.getRepoManager(pi)
+        repo.reloadLocalIfNeeded(pi)
+        println ">>>> LOCAL PACKAGES:"
+        repo.packages.localPackages.values().each { p -> println "     ${p.path}  @ ${p.location}" }
+        def mgr = handler.getAndroidTargetManager(pi)
+        def ts = mgr.getTargets(pi)
+        println ">>>> TARGETS count=${ts.size()}"
+        ts.each { t -> println "     hash=${com.android.sdklib.AndroidTargetHash.getTargetHashString(t)} class=${t.getClass().name} loc=${t.location}" }
+        println ">>>> LOAD ERROR platforms;android-34 -> ${mgr.getErrorForPackage('platforms;android-34')}"
+    }
+}

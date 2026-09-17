@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">APK Lab</string>
+    <string name="hello">Built on Termux, no Gradle.</string>
+    <color name="brand">#3DDC84</color>
+</resources>

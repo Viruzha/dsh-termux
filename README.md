@@ -18,6 +18,10 @@ dsh-termux/
 │   ├── session-eacces.sh         会话落盘 link()→rename() 回退
 │   ├── attachment-android.sh     附件库 fsync 走查 + 硬链接回退
 │   └── ripgrep-android.sh        glob/grep 的 ripgrep 垫片
+├── runtime/                自包含 App 的 Android 运行时（node / ripgrep / 共享库）
+├── apps/                   配套 App 工程（源码 + 脚本 + 产物，不含可重下的大件）
+│   ├── wake-app/           一键唤醒：Tailscale Funnel + 三 Tab 深色 UI
+│   └── apk-lab/            无 Gradle 构建 APK 的工具链、三条路线与实测报告
 ├── tools/
 │   ├── setup-shizuku-rish.sh     安装/修复 rish（Shizuku 通道，免 adb/WiFi）
 │   ├── rsh                       以 shell(uid 2000) 执行命令（自动重试 + 流合并）
@@ -63,6 +67,59 @@ tools/open-app.sh --current       # 看当前前台是哪个应用
 
 打开 App 需要 shell(uid 2000) 身份：优先走 **rish 通道**（不需要 adb / 无线调试 / WiFi），
 不可用时自动回退无线 adb。别名表在脚本顶部，可自行增删。
+
+## 配套工程（apps/ 与 runtime/）
+
+仓库除"把 DSH 在 Termux 上跑起来"之外，还携带两个 App 工程和一份运行时。
+
+### `runtime/` —— 自包含 App 的运行时
+
+从 Termux 取出的、**npm 与 Gradle 都给不了**的 Android aarch64 原生件：
+`node` v26.3.1（46 MB）、`rg` 15.1.0、以及 node 的全部非系统依赖（9 个 `.so`）。
+
+实测证明了它的可重定位性：`node` 与前缀的耦合**只有 `DT_RUNPATH` 一处**，而
+`DT_RUNPATH` 的搜索顺序在 `LD_LIBRARY_PATH` **之后**，所以
+
+```bash
+LD_LIBRARY_PATH=./runtime/lib ./runtime/bin/node -v   # → v26.3.1
+```
+
+详见 `runtime/README.md`。
+
+### `apps/wake-app/` —— 一键唤醒
+
+远程唤醒家里电脑，**手机端不需要开任何 VPN**。链路：
+
+```
+App --HTTPS--> Tailscale Funnel --> wol-api(viruzha) --> wakeonlan
+```
+
+三 Tab（唤醒 / 设备 / 设置）深色 UI，43 KB，零第三方依赖，用无 Gradle 流水线构建。
+服务端 `wol-api.py` 与部署说明在工程内。
+
+### `apps/apk-lab/` —— 在手机上构建 APK
+
+不依赖 Gradle 与 Android SDK Manager 的完整构建链，三条实测跑通的路线：
+
+| 路线 | 说明 |
+|---|---|
+| 无 Gradle 直构 | `aapt2 + javac + d8 + zipalign + apksigner` |
+| apktool 二次打包 | 改已有 APK（需包装脚本过滤旧版 aapt2 不认的参数） |
+| Gradle + AGP | AGP 9.4.0 可行，含 AndroidX，需 5 项手工配置 |
+
+`REPORT.md` 是完整实测报告（含 `compileSdk` 只能用 34 的硬限制、d8 不能处理匿名内部类等坑）。
+**大件不入库**：`sdk/`、`apktool.jar`、`gradle-test/` 的缓存都可按报告里的 URL 重新获取。
+
+### 构建
+
+两个工程都用同一套无 Gradle 流水线，签名密钥不存在时自动生成，因此克隆后可直接构建：
+
+```bash
+cd apps/wake-app   && ./build.sh    # 产出 dist/wake.apk
+cd apps/apk-lab    && ./build.sh    # 需要先按 REPORT.md 取 android.jar
+```
+
+---
 
 ## 两条 shell 通道
 

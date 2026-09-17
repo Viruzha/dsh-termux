@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">一键唤醒</string>
+
+    <string name="tab_wake">唤醒</string>
+    <string name="tab_devices">设备</string>
+    <string name="tab_settings">设置</string>
+
+    <string name="wake_sub">点一下，让家里的电脑醒来</string>
+    <string name="state_checking">检测中…</string>
+    <string name="state_ok">服务端已连接</string>
+    <string name="state_bad">服务端不可达</string>
+    <string name="btn_wake">唤 醒</string>
+    <string name="btn_check">检测</string>
+    <string name="btn_save">保存</string>
+
+    <string name="last_wake">最近一次</string>
+    <string name="none">暂无记录</string>
+    <string name="last_hint">还没有触发过唤醒</string>
+
+    <string name="devices_sub">已管理的设备</string>
+    <string name="add_device">＋  添加设备</string>
+    <string name="add_device_hint">当前版本管理一台设备；多设备与分组会在后续版本加上。</string>
+    <string name="device_online">在线</string>
+    <string name="device_offline">已关机</string>
+    <string name="device_unknown">状态未知</string>
+
+    <string name="settings_sub">配置与关于</string>
+    <string name="sec_conn">连接</string>
+    <string name="sec_device">设备</string>
+    <string name="sec_about">关于</string>
+    <string name="f_endpoint">服务端地址</string>
+    <string name="f_token">鉴权 token</string>
+    <string name="f_token_hint">取自服务端 /etc/wol-api.env，64 位十六进制</string>
+    <string name="f_name">设备名称</string>
+    <string name="f_mac">MAC 地址</string>
+    <string name="f_mac_hint">服务端用它发送唤醒魔术包</string>
+    <string name="saved">已保存</string>
+
+    <string name="default_name">家里电脑</string>
+    <string name="default_mac">2C:F0:5D:0E:61:C8</string>
+    <string name="masked">••••••••</string>
+</resources>

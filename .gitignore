@@ -3,6 +3,7 @@ config/credentials.yaml
 config/sessions/
 config/attachments/
 data/
+*.keystore
 
 # ── 生成物与备份 ─────────────────────────────────────────
 *.tar.zst
@@ -11,3 +12,13 @@ data/
 *.bak
 *.log
 .DS_Store
+
+# ── 可重新下载的大件（apps/ 下的工程不携带这些）──────────
+apps/apk-lab/sdk/platforms/*/android.jar
+apps/apk-lab/apktool-test/framework/
+apps/apk-lab/apktool-test/apktool.jar
+apps/apk-lab/dl/
+apps/*/local.properties
+apps/*/build/
+apps/apk-lab/gradle-test/**/build/
+apps/apk-lab/gradle-test/.gradle/
