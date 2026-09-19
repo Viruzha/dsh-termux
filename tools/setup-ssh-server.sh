@@ -100,33 +100,37 @@ fi
 # --- 开机自启 ---
 if [ "$BOOT" = 1 ]; then
   mkdir -p /data/adb/service.d
-  cat > /data/adb/service.d/99-sshd.sh <<'BOOTEOF'
+  cat > /data/adb/sshd-watchdog.sh <<'WDOGEOF'
 #!/system/bin/sh
-# 开机启动并守护 Termux 的 sshd —— 由 dsh-termux 的 setup-ssh-server.sh 添加。
-# 删除本文件即可完全取消。
-#
-# 为什么用看门狗而不是只启动一次：
-#   1. WiFi 重启/切换会让 sshd 的监听失效，启动一次的方案不会自愈
-#   2. Android 可能回收后台进程
-# 要点：Android 需要 inet(3003) 等附加组才能创建网络 socket，必须用 su -G。
+# Termux sshd 看门狗：每 60 秒检查，不在就拉起。
+# 注意：必须用 pidof 精确匹配进程名。用 ps|grep "[s]shd" 会匹配到本脚本
+# 自己的名字（sshd-watchdog.sh），导致永远认为 sshd 还活着 —— 实测踩过。
 P=/data/data/com.termux/files/usr
 H=/data/data/com.termux/files/home
+U=__UID__
 LOG=$H/.sshd-boot.log
-(
-  sleep 25
-  while :; do
-    if ! ps -A 2>/dev/null | grep -q "[s]shd"; then
-      export HOME=$H PREFIX=$P LD_LIBRARY_PATH=$P/lib PATH=$P/bin:/system/bin TMPDIR=$P/tmp
-      echo "$(date) 拉起 sshd" >> $LOG
-      su -g __UID__ -G 1004 -G 1007 -G 1011 -G 1015 -G 1028 -G 1078 -G 1079 \
-         -G 3001 -G 3002 -G 3003 -G 3006 -G 3009 -G 3011 __UID__ \
-         -c "cd $H && $P/bin/sshd" >> $LOG 2>&1
-    fi
-    sleep 60
-  done
-) &
+export HOME=$H PREFIX=$P LD_LIBRARY_PATH=$P/lib PATH=$P/bin:/system/bin TMPDIR=$P/tmp
+echo "$(date) 看门狗启动 (pid $$)" >> $LOG
+while :; do
+  if ! pidof sshd >/dev/null 2>&1; then
+    echo "$(date) 拉起 sshd" >> $LOG
+    su -g $U -G 1004 -G 1007 -G 1011 -G 1015 -G 1028 -G 1078 -G 1079 \
+       -G 3001 -G 3002 -G 3003 -G 3006 -G 3009 -G 3011 $U \
+       -c "cd $H && $P/bin/sshd" >> $LOG 2>&1
+  fi
+  sleep 60
+done
+WDOGEOF
+
+  cat > /data/adb/service.d/99-sshd.sh <<'BOOTEOF'
+#!/system/bin/sh
+# Magisk service.d 入口。删除本文件即可完全取消开机自启。
+# 必须 setsid 脱离进程组：Magisk 日志能看到 "service.d: exec"，但脚本返回时
+# 后台子 shell 会被一起回收，看门狗活不下来（实测日志文件都没写）。
+setsid /system/bin/sh /data/adb/sshd-watchdog.sh </dev/null >/dev/null 2>&1 &
 BOOTEOF
-  sed -i "s/__UID__/$U/g" /data/adb/service.d/99-sshd.sh
+  sed -i "s/__UID__/$U/g" /data/adb/sshd-watchdog.sh
+  chmod 700 /data/adb/sshd-watchdog.sh; chown 0:0 /data/adb/sshd-watchdog.sh
   chmod 755 /data/adb/service.d/99-sshd.sh
   chown 0:0 /data/adb/service.d/99-sshd.sh
 fi
