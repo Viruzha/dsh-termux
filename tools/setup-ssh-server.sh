@@ -132,15 +132,27 @@ BOOTEOF
 fi
 
 # --- 启动 ---
-PID=\$(ps -A -o PID,NAME | awk '\$2=="sshd"{print \$1}' | head -1)
-[ -n "\$PID" ] && { kill \$PID; sleep 2; }
+# 用 pidof（toybox 的 ps 不支持 -o PID,NAME）
+for pid in \$(pidof sshd 2>/dev/null); do kill \$pid 2>/dev/null; done
+sleep 2
 export HOME=\$H PREFIX=\$P LD_LIBRARY_PATH=\$P/lib PATH=\$P/bin:/system/bin TMPDIR=\$P/tmp
 su -g \$U -G 1004 -G 1007 -G 1011 -G 1015 -G 1028 -G 1078 -G 1079 \\
    -G 3001 -G 3002 -G 3003 -G 3006 -G 3009 -G 3011 \$U -c "cd \$H && \$P/bin/sshd"
 sleep 2
 
+
+# --- 立刻启动看门狗（关键）---
+# 必须 setsid 完全脱离会话：否则从 Termux 会话或 adb shell 启动的进程
+# 会随会话结束被回收，那样 service.d 只在开机时生效，中途挂掉就没人管。
+if [ "$BOOT" = 1 ]; then
+  su -c "setsid nohup sh /data/adb/service.d/99-sshd.sh >/dev/null 2>&1 </dev/null &" 2>/dev/null
+  sleep 2
+fi
+
 echo "--- sshd 进程 ---"
-ps -A -o PID,USER,NAME | grep sshd
+pidof sshd 2>/dev/null | sed "s/^/    pid /"
+echo "--- 看门狗 ---"
+ps -A 2>/dev/null | grep "[9]9-sshd" | head -2
 echo "--- 监听 ---"
 ss -tlnp 2>/dev/null | grep ":$PORT"
 echo "TS=\$TS"
