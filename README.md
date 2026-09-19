@@ -23,6 +23,7 @@ dsh-termux/
 │   ├── wake-app/           一键唤醒：Tailscale Funnel + 三 Tab 深色 UI
 │   └── apk-lab/            无 Gradle 构建 APK 的工具链、三条路线与实测报告
 ├── tools/
+│   ├── setup-ssh-server.sh       在已 root 设备上配置 Termux sshd（密钥+开机自启）
 │   ├── setup-shizuku-rish.sh     安装/修复 rish（Shizuku 通道，免 adb/WiFi）
 │   ├── rsh                       以 shell(uid 2000) 执行命令（自动重试 + 流合并）
 │   ├── apk-install.sh            免 adb 安装/卸载 APK
@@ -67,6 +68,28 @@ tools/open-app.sh --current       # 看当前前台是哪个应用
 
 打开 App 需要 shell(uid 2000) 身份：优先走 **rish 通道**（不需要 adb / 无线调试 / WiFi），
 不可用时自动回退无线 adb。别名表在脚本顶部，可自行增删。
+
+## 已 root 设备的 SSH 常驻（docs/SSH-SERVER.md）
+
+免 root 设备只能靠 adb / Shizuku 拿 shell，且容易被系统回收。**已 root 的设备可以直接跑 SSH 服务**：
+
+```bash
+tools/setup-ssh-server.sh <adb-serial>          # 配置好即 ssh -p 8022 <uid>@<ip>
+ssh <uid>@<ip> -p 8022 'su -c id'               # 提权到 root
+```
+
+要点（都是踩出来的，详见 `docs/SSH-SERVER.md`）：
+
+| 坑 | 现象 | 解法 |
+|---|---|---|
+| `su` 没给附加组 | `socket: Permission denied` | 必须 `-G 3003`(inet) 等完整组集 |
+| 绑具体 IP | WiFi 重启后监听失效且不自愈 | 绑 `0.0.0.0` |
+| 只启动一次 | 进程被回收后无人拉起 | `service.d` 里放 60 秒看门狗 |
+| Android hostname | `bad addr or host: <NULL>` | 显式 `ListenAddress` |
+| Termux home 是 777 | StrictModes 拒绝 authorized_keys | `StrictModes no`（或修权限） |
+| 主机私钥 0777 | sshd 拒绝启动 | `chmod 600` |
+
+---
 
 ## 配套工程（apps/ 与 runtime/）
 
