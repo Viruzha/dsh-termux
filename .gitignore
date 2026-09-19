@@ -20,6 +20,10 @@ apps/apk-lab/apktool-test/apktool.jar
 apps/apk-lab/dl/
 apps/*/local.properties
 apps/*/build/
+# ⚠️ 构建产物绝不入库：APK 里内嵌了 token（default_token 字符串资源）
+#    曾经漏在这里，导致真实 token 进了历史，只能轮换
+apps/wake-app/dist/
+apps/hub/dist/
 # hub 的运行时从仓库 runtime/ 暂存，不重复入库
 apps/hub/assets/
 apps/apk-lab/gradle-test/**/build/
