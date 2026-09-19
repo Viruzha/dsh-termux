@@ -1,0 +1,4 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# 停止 SSH：  ~/ssh-off
+pkill -f '[b]in/sshd' && echo "✓ SSH 已停止" || echo "（本来就没在跑）"
+termux-wake-unlock 2>/dev/null && echo "  已释放唤醒锁"

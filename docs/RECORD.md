@@ -221,6 +221,56 @@ WOL token 编译成 `default_token` 字符串资源 —— 等于把 64 位真�
 
 ---
 
+## ⑨ 对外接口域名调研 + 安全审查
+
+**起因**：token 泄露事件后，想把对外暴露的接口域名换掉。
+
+### 结论一：Tailscale Funnel **不支持自定义域名**
+
+- 官方功能请求 [tailscale/tailscale#17913](https://github.com/tailscale/tailscale/issues/17913) 仍是 **open**
+- 社区讨论帖标题直接就是 ["Mission Impossible?"](https://github.com/NginxProxyManager/nginx-proxy-manager/discussions/4743)
+- Funnel 地址恒为 `<机器名>.<tailnet名>.ts.net`
+
+### 结论二：两段名字的可改程度完全不同
+
+按官方文档 [Tailnet names and types](https://tailscale.com/docs/concepts/tailnet-name)：
+
+| 段 | 能自己指定吗 | 说明 |
+|---|---|---|
+| **机器名**（`viruzha`） | ✅ **完全自由** | 后台 Machines 页或 `tailscale set --hostname=` 随时改 |
+| **tailnet 名**（`tail428778`） | ❌ **只能从随机候选里挑** | 后台 DNS 页生成一组随机名（如 `cat-crocodile.ts.net`）供选择 |
+
+⚠️ **且 tailnet 名基本是一次性的**：文档明确写「一旦用随机名签发了 HTTPS 证书，
+就**不能再重新生成**，只能在新旧名之间切换」。
+
+**改机器名的隐藏坑**：Serve/Funnel 配置**不会随主机名迁移**
+（[issue #6452](https://github.com/tailscale/tailscale/issues/6452)），
+改完必须重新 `tailscale funnel --bg --https=443 http://127.0.0.1:8787`。
+
+### 结论三：**域名对安全没有影响**（源码级确认）
+
+逐行审了 `wol-api.py`：
+
+| 安全项 | 实现 |
+|---|---|
+| 鉴权 | `/wake`、`/status` 均必须带 token |
+| 比较方式 | `hmac.compare_digest` —— **常数时间**，防时序侧信道 |
+| 失败即拒绝 | `bool(TOKEN) and ...` —— token 未配置时**默认全拒**（fail-closed） |
+| 抗爆破 | 401 前 `time.sleep(1)` |
+| 日志 | `log_message` 被禁用 → **token 不会落进日志** |
+
+三个小瑕疵（均**不构成实际风险**）：`/health` 免鉴权且泄露版本号；
+那 1 秒 sleep 在抗爆破的同时也占住线程（轻度 DoS 面）；
+token 走查询串而非请求头。
+
+**关于"会不会被扫到"**：Funnel 证书走 Let's Encrypt，**CT 日志公开可查**，
+所以 `*.ts.net` 主机名理论上可枚举。但拿到域名后访问 `/wake` 仍是 **401**，
+爆破要面对 **2²⁵⁶** 的空间且每次失败被拖 1 秒。**发现 ≠ 能进去。**
+
+**决定：不改。** 改域名只是隐蔽性游戏，收益极小。
+
+---
+
 ## 通用规律（跨条线，值得记）
 
 1. **不要用缓存判断状态**。ARP 表、DHCP 租约、DNS 缓存都会滞后 —— 主动探测慢一点，但不会骗你。
@@ -232,6 +282,9 @@ WOL token 编译成 `default_token` 字符串资源 —— 等于把 64 位真�
    链路差时改用**分片 + 断点续传**。
 6. **"能跑"和"可靠"是两件事**。前者证明可行性，后者才决定能不能用。
 7. **同名 WiFi ≠ 同一个 AP**。mesh 下客户端可能粘在远处节点，且系统认为当前信号"够用"而不漫游。
+8. **"公开可发现"不等于"可被攻破"**。服务暴露在公网会被扫到，但只要鉴权做对
+   （强随机 + 常数时间比较 + fail-closed），被扫到本身不是问题。
+   判断风险要看**攻破成本**，不是看**暴露面**。
 
 ---
 
@@ -275,5 +328,7 @@ WOL token 编译成 `default_token` 字符串资源 —— 等于把 64 位真�
 - [ ] SSH 自愈（sshd 挂掉后看门狗拉起）**逻辑已修正但未验证成功**
 - [ ] vangogh 的 mesh 节点粘滞会复现，可能需要定期重连或从路由器侧固定
 - [ ] WebView 延迟初始化（不开 DSH 可省下约 58MB 里的 WebView 部分）
-- [ ] 对外接口域名：Funnel 不支持自定义域名，若要换需改用 Cloudflare Tunnel 或先改机器名
+- [x] 对外接口域名：调研完毕，**决定不改**（Funnel 不支持自定义域名；域名与安全无关）
 - [ ] 打卡「自愈」逻辑已修正但未在真实重启后验证
+- [ ] dsh-app/（hub 的前身，纯 DSH 版）未入库，已被 hub 取代
+- [ ] rooted-phone 里的一次性调试脚本（fix-sshd/killsshd/restart-sshd）未入库，属开发残留

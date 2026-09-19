@@ -1,0 +1,24 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# 需要远程 SSH 时运行：  ~/ssh-on
+# 停止：              ~/ssh-off
+#
+# 关键点：termux-wake-lock 拿唤醒锁。没有它，Termux 被系统挂起后
+# sshd 会跟着消失（现象是"刚起完能用，过一会儿 Connection refused"）。
+set -uo pipefail
+
+termux-wake-lock 2>/dev/null || echo "  ! termux-wake-lock 不可用（没有唤醒锁，可能被系统挂起）"
+
+pkill -f '[b]in/sshd' 2>/dev/null
+sleep 1
+sshd 2>&1 | head -3
+sleep 3          # 给 sshd 一点时间完成绑定
+
+if pidof sshd >/dev/null 2>&1; then
+  IP=$(ifconfig 2>/dev/null | grep -o 'inet 192\.[0-9.]*' | head -1 | awk '{print $2}')
+  PORT=$(grep -E '^Port' "$PREFIX/etc/ssh/sshd_config" 2>/dev/null | awk '{print $2}')
+  echo "✓ SSH 已启动 (pid $(pidof sshd | tr '\n' ' '))"
+  echo "  ssh -p ${PORT:-8022} $(whoami)@${IP:-<本机IP>}"
+  echo "  已持有唤醒锁"
+else
+  echo "✗ 启动失败。详细错误： sshd -d -e"
+fi

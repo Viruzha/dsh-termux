@@ -25,6 +25,7 @@ dsh-termux/
 │   └── apk-lab/            无 Gradle 构建 APK 的工具链、三条路线与实测报告
 ├── tools/
 │   ├── setup-ssh-server.sh       在已 root 设备上配置 Termux sshd（密钥+开机自启）
+│   ├── ssh-on / ssh-off          投到目标机 Termux，随时启停 sshd（带唤醒锁）
 │   ├── setup-shizuku-rish.sh     安装/修复 rish（Shizuku 通道，免 adb/WiFi）
 │   ├── rsh                       以 shell(uid 2000) 执行命令（自动重试 + 流合并）
 │   ├── apk-install.sh            免 adb 安装/卸载 APK
