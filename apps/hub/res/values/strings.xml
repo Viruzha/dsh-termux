@@ -9,7 +9,12 @@
     <string name="tab_punch">打卡</string>
     <string name="punch_sub">悬浮按钮 · 每天凌晨 5 点刷新</string>
     <string name="punch_sec_overlay">悬浮按钮</string>
-    <string name="punch_sec_history">历史记录</string>
+    <string name="punch_sec_history">历史记录 · 点任意一条可删除</string>
+    <string name="punch_undo">撤销今天打卡</string>
+    <string name="punch_del_title">删除打卡记录</string>
+    <string name="punch_del_msg">确定删除 %s 的打卡记录吗？</string>
+    <string name="punch_del_ok">删除</string>
+    <string name="punch_del_cancel">取消</string>
     <string name="punch_grant">去授予悬浮窗权限</string>
     <string name="punch_on">开启悬浮按钮</string>
     <string name="punch_off">关闭悬浮按钮</string>

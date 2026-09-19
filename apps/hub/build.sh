@@ -3,22 +3,11 @@
 set -euo pipefail
 
 APP="$(cd "$(dirname "$0")" && pwd)"
-# SDK 位置可用 ANDROID_SDK 覆盖（默认沿用本机工作区里的那份）
-SDK="${ANDROID_SDK:-$HOME/dsh-workspace/apk-lab/sdk}"
+SDK="$HOME/dsh-workspace/apk-lab/sdk"
 LINK_JAR="$SDK/platforms/android-34/android.jar"
 CODE_JAR="$SDK/platforms/android-36/android.jar"
 KEYSTORE="${HUB_KEYSTORE:-$HOME/dsh-workspace/apk-lab/debug.keystore}"
 OUT="$APP/build"
-
-# 运行时（node + rg + 依赖 .so）在仓库里只保留一份，位于 ../../runtime/。
-# 这里把它暂存到 assets/runtime 供 aapt2 打包，避免仓库里存两份 95MB。
-RT="$(cd "$APP/../.." && pwd)/runtime"
-if [ -d "$RT/bin" ]; then
-  mkdir -p "$APP/assets/runtime"
-  cp -a "$RT/bin" "$RT/lib" "$RT/etc" "$APP/assets/runtime/" 2>/dev/null || true
-fi
-[ -x "$APP/assets/runtime/bin/node" ] || {
-  echo "缺少运行时：$RT 里没有 bin/node" >&2; exit 1; }
 
 say() { printf '\n==> %s\n' "$*"; }
 rm -rf "$OUT"; mkdir -p "$OUT/classes" "$OUT/dex" "$OUT/gen"

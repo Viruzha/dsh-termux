@@ -122,6 +122,25 @@ public class PunchStore {
     public boolean enabled() { return sp.getBoolean("overlay_enabled", false); }
     public void setEnabled(boolean on) { sp.edit().putBoolean("overlay_enabled", on).apply(); }
 
+    /**
+     * 删除某一天的打卡记录（点错了要能撤销）。返回是否真的删掉了。
+     * 删完该天若再打卡，会记为新的时间。
+     */
+    public boolean remove(String day) {
+        StringBuilder sb = new StringBuilder();
+        boolean removed = false;
+        for (Entry e : all()) {
+            if (e.day.equals(day)) { removed = true; continue; }
+            if (sb.length() > 0) sb.append('\n');
+            sb.append(e.day).append('=').append(e.time);
+        }
+        if (removed) {
+            if (sb.length() == 0) sp.edit().remove(KEY_LOGS).apply();
+            else sp.edit().putString(KEY_LOGS, sb.toString()).apply();
+        }
+        return removed;
+    }
+
     /** 仅用于调试/设置页：清空记录。 */
     public void clear() { sp.edit().remove(KEY_LOGS).apply(); }
 

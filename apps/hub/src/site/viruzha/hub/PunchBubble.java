@@ -90,6 +90,7 @@ public class PunchBubble extends TextView implements View.OnTouchListener {
             setTextColor(Color.parseColor("#FFEDF3F7"));
         }
         setBackground(bg);
+        android.util.Log.i("HUB", "悬浮框刷新 -> " + getText());
     }
 
     @Override public boolean onTouch(View v, MotionEvent e) {

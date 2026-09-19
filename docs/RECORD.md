@@ -178,6 +178,9 @@ AP 漫游（60 次采样 BSSID 不变）、后台扫描（关掉无改善）、�
 3. **自启动只用官方 `BOOT_COMPLETED`**。设备管理员是 MDM 用的、与自启无关且让卸载变麻烦；
    无障碍服务虽难被杀但要手动开、弹警告，属滥用。
 
+**撤销功能**：今天的打卡可在卡片里一键撤销，历史列表点任意一条也能删，
+两者都弹确认框；删除后调 `PunchService.refreshNow()` 让悬浮框立刻改回「未打卡」。
+
 **白盒审查修掉的问题**：静态强引用持有页面造成泄漏（退出 App 不走 onHide）→ WeakReference；
 倒计时退到后台仍每秒唤醒 CPU → 给 Screen 加 onResume/onPause；
 拖动起点用 `getLeft()/getTop()` 取值错误（对 WindowManager 窗口那不是屏幕位置，

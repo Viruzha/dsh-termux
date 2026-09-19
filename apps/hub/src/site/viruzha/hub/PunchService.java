@@ -48,6 +48,14 @@ public class PunchService extends Service implements PunchBubble.Listener, Punch
     public static boolean isRunning() { return running; }
     private static boolean running = false;
 
+    /** 服务实例引用：界面删完记录后要立刻刷新悬浮框。onDestroy 会清掉。 */
+    private static PunchService instance;
+
+    /** 让悬浮框按最新数据重绘（界面删记录后调用）。 */
+    public static void refreshNow() {
+        if (instance != null) instance.refreshBubble();
+    }
+
     private WindowManager wm;
     private PunchBubble bubble;
     private WindowManager.LayoutParams lp;
@@ -73,6 +81,7 @@ public class PunchService extends Service implements PunchBubble.Listener, Punch
         startForeground(NOTI_ID, buildNotification());
         showBubble();
         running = true;
+        instance = this;
     }
 
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
@@ -195,6 +204,7 @@ public class PunchService extends Service implements PunchBubble.Listener, Punch
 
     @Override public void onDestroy() {
         running = false;
+        instance = null;
         if (bubble != null && wm != null) {
             store.saveBubblePos(lp.x, lp.y);
             try { wm.removeView(bubble); } catch (Exception ignored) { }

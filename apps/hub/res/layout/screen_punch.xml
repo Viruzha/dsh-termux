@@ -30,6 +30,12 @@
           android:letterSpacing="-0.02" />
       <TextView android:id="@+id/p_countdown" android:layout_width="match_parent"
           android:layout_height="wrap_content" android:layout_marginTop="4dp" style="@style/Sub" />
+
+      <TextView android:id="@+id/p_undo" android:layout_width="match_parent"
+          android:layout_height="44dp" android:layout_marginTop="14dp"
+          android:background="@drawable/btn_ghost" android:gravity="center"
+          android:text="@string/punch_undo" android:textSize="14sp"
+          android:textColor="@color/danger" android:clickable="true" android:focusable="true" />
     </LinearLayout>
 
     <!-- 悬浮窗 -->

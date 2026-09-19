@@ -1,5 +1,7 @@
 package site.viruzha.hub;
 
+import android.app.AlertDialog;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.graphics.Color;
 import android.net.Uri;
@@ -22,7 +24,7 @@ public class PunchScreen extends Screen implements View.OnClickListener, PunchSe
     private PunchStore store;
     private final Handler ui = new Handler(Looper.getMainLooper());
 
-    private TextView stateTxt, timeTxt, countdown, permTxt, toggle, hint, batt, battBtn;
+    private TextView stateTxt, timeTxt, countdown, permTxt, toggle, hint, batt, battBtn, undo;
     private LinearLayout history;
 
     public PunchScreen(MainActivity app) { super(app); }
@@ -39,11 +41,13 @@ public class PunchScreen extends Screen implements View.OnClickListener, PunchSe
         hint     = (TextView) $(R.id.p_hint);
         batt     = (TextView) $(R.id.p_batt);
         battBtn  = (TextView) $(R.id.p_batt_btn);
+        undo     = (TextView) $(R.id.p_undo);
         history  = (LinearLayout) $(R.id.p_history);
 
         $(R.id.p_grant).setOnClickListener(this);
         toggle.setOnClickListener(this);
         battBtn.setOnClickListener(this);
+        undo.setOnClickListener(this);
         return root;
     }
 
@@ -78,6 +82,10 @@ public class PunchScreen extends Screen implements View.OnClickListener, PunchSe
                     Uri.parse("package:" + app.getPackageName()));
             try { app.startActivity(i); }
             catch (Exception e) { app.toast("无法打开悬浮窗权限设置：" + e.getMessage()); }
+            return;
+        }
+        if (id == R.id.p_undo) {
+            confirmDelete(PunchStore.punchDay(System.currentTimeMillis()));
             return;
         }
         if (id == R.id.p_batt_btn) {
@@ -147,6 +155,8 @@ public class PunchScreen extends Screen implements View.OnClickListener, PunchSe
         hint.setText(running ? "悬浮按钮显示中 · 轻点打卡 · 长按打开 App · 可拖动"
                              : "开启后会在所有界面最上层常驻一个小按钮");
 
+        undo.setVisibility(done ? View.VISIBLE : View.GONE);
+
         // 状态点
         View d = $(R.id.p_dot);
         d.setBackgroundResource(done ? R.drawable.dot_on : R.drawable.dot_off);
@@ -158,20 +168,20 @@ public class PunchScreen extends Screen implements View.OnClickListener, PunchSe
         history.removeAllViews();
         List<PunchStore.Entry> list = store.all();
         if (list.isEmpty()) {
-            history.addView(row(app.getString(R.string.punch_none), "", false));
+            history.addView(row(app.getString(R.string.punch_none), "", false, null));
             return;
         }
         int n = 0;
         for (PunchStore.Entry e : list) {
             if (n++ >= 30) break;
-            history.addView(row(PunchStore.friendly(e.day), PunchStore.hhmmss(e.time), true));
+            history.addView(row(PunchStore.friendly(e.day), PunchStore.hhmmss(e.time), true, e.day));
         }
         if (list.size() > 30) {
-            history.addView(row("… 共 " + list.size() + " 天记录", "", false));
+            history.addView(row("… 共 " + list.size() + " 天记录", "", false, null));
         }
     }
 
-    private View row(String left, String right, boolean accent) {
+    private View row(String left, String right, boolean accent, String day) {
         LinearLayout r = new LinearLayout(app);
         r.setOrientation(LinearLayout.HORIZONTAL);
         r.setBackgroundResource(R.drawable.card);
@@ -196,11 +206,36 @@ public class PunchScreen extends Screen implements View.OnClickListener, PunchSe
         b.setTextColor(app.getColor(accent ? R.color.accent : R.color.text_dim));
         b.setTypeface(android.graphics.Typeface.MONOSPACE);
         r.addView(b);
+
+        if (day != null) {
+            r.setTag(day);
+            r.setClickable(true);
+            r.setFocusable(true);
+            r.setOnClickListener(rowClick);
+        }
         return r;
+    }
+
+    /** 点历史行 → 确认后删除。 */
+    void confirmDelete(String day) {
+        new AlertDialog.Builder(app)
+            .setTitle(app.getString(R.string.punch_del_title))
+            .setMessage(app.getString(R.string.punch_del_msg, PunchStore.friendly(day)))
+            .setNegativeButton(app.getString(R.string.punch_del_cancel), (DialogInterface.OnClickListener) null)
+            .setPositiveButton(app.getString(R.string.punch_del_ok), new DeleteConfirm(this, day))
+            .show();
+    }
+
+    void doDelete(String day) {
+        boolean ok = store.remove(day);
+        PunchService.refreshNow();   // 悬浮框立刻改回「未打卡」
+        refresh();
+        app.toast(ok ? "已删除 " + PunchStore.friendly(day) + " 的打卡记录" : "该记录已不存在");
     }
 
     private int dp(int v) { return (int) (app.getResources().getDisplayMetrics().density * v); }
 
+    private final View.OnClickListener rowClick = new RowClick(this);
     private final Runnable tick = new Tick(this);
     private final Runnable refreshTask = new RefreshTask(this);
 
@@ -225,6 +260,21 @@ public class PunchScreen extends Screen implements View.OnClickListener, PunchSe
                 s.refresh();
             }
             s.ui.postDelayed(this, 1000);
+        }
+    }
+
+    static class DeleteConfirm implements DialogInterface.OnClickListener {
+        private final PunchScreen s; private final String day;
+        DeleteConfirm(PunchScreen s, String day) { this.s = s; this.day = day; }
+        @Override public void onClick(DialogInterface d, int which) { s.doDelete(day); }
+    }
+
+    static class RowClick implements View.OnClickListener {
+        private final PunchScreen s;
+        RowClick(PunchScreen s) { this.s = s; }
+        @Override public void onClick(View v) {
+            Object t = v.getTag();
+            if (t instanceof String) s.confirmDelete((String) t);
         }
     }
 
