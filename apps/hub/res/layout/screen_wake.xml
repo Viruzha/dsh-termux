@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:fillViewport="true" android:scrollbars="none">
+  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+      android:orientation="vertical" android:padding="22dp">
+
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:text="@string/tab_wake" style="@style/H1" />
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:layout_marginTop="6dp" android:text="@string/wake_sub" style="@style/Sub" />
+
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="vertical" android:layout_marginTop="22dp"
+        android:padding="20dp" android:background="@drawable/card">
+
+      <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+          android:orientation="horizontal" android:gravity="center_vertical">
+        <View android:id="@+id/chip_dot" android:layout_width="9dp" android:layout_height="9dp"
+            android:background="@drawable/dot_off" />
+        <TextView android:id="@+id/chip_text" android:layout_width="0dp" android:layout_height="wrap_content"
+            android:layout_weight="1" android:layout_marginLeft="9dp" android:textSize="13sp"
+            android:textColor="@color/text_dim" android:text="@string/state_checking" />
+        <TextView android:id="@+id/target_ip" android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:textSize="11sp" android:textColor="@color/text_faint" />
+      </LinearLayout>
+
+      <TextView android:id="@+id/dev_name" android:layout_width="wrap_content" android:layout_height="wrap_content"
+          android:layout_marginTop="16dp" android:textSize="21sp" android:textStyle="bold"
+          android:textColor="@color/text" />
+      <TextView android:id="@+id/dev_mac" android:layout_width="wrap_content" android:layout_height="wrap_content"
+          android:layout_marginTop="4dp" android:textSize="12sp" android:textColor="@color/text_faint"
+          android:letterSpacing="0.06" />
+
+      <TextView android:id="@+id/wake_btn" android:layout_width="match_parent" android:layout_height="118dp"
+          android:layout_marginTop="20dp" android:background="@drawable/btn_wake_sel"
+          android:gravity="center" android:text="@string/btn_wake" android:textSize="23sp"
+          android:textStyle="bold" android:textColor="#FF06150D" android:letterSpacing="0.28"
+          android:clickable="true" android:focusable="true" />
+
+      <TextView android:id="@+id/wake_msg" android:layout_width="match_parent" android:layout_height="wrap_content"
+          android:layout_marginTop="14dp" android:gravity="center" style="@style/Sub" />
+    </LinearLayout>
+
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:layout_marginTop="26dp" android:layout_marginLeft="4dp"
+        android:text="@string/last_wake" style="@style/CardTitle" />
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="vertical" android:layout_marginTop="10dp"
+        android:padding="18dp" android:background="@drawable/card">
+      <TextView android:id="@+id/last_time" android:layout_width="wrap_content"
+          android:layout_height="wrap_content" android:text="@string/none" style="@style/RowValue" />
+      <TextView android:id="@+id/last_detail" android:layout_width="match_parent"
+          android:layout_height="wrap_content" android:layout_marginTop="6dp"
+          android:text="@string/last_hint" style="@style/Sub" />
+    </LinearLayout>
+  </LinearLayout>
+</ScrollView>

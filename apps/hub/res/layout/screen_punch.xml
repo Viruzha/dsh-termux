@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:fillViewport="true" android:scrollbars="none">
+  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+      android:orientation="vertical" android:padding="22dp">
+
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:text="@string/tab_punch" style="@style/H1" />
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:layout_marginTop="6dp" android:text="@string/punch_sub" style="@style/Sub" />
+
+    <!-- 今天 -->
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="vertical" android:layout_marginTop="20dp"
+        android:padding="18dp" android:background="@drawable/card">
+      <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+          android:orientation="horizontal" android:gravity="center_vertical">
+        <View android:id="@+id/p_dot" android:layout_width="9dp" android:layout_height="9dp"
+            android:background="@drawable/dot_off" />
+        <TextView android:id="@+id/p_today_state" android:layout_width="0dp"
+            android:layout_height="wrap_content" android:layout_weight="1"
+            android:layout_marginLeft="9dp" android:textSize="13sp"
+            android:textColor="@color/text_dim" />
+      </LinearLayout>
+
+      <TextView android:id="@+id/p_today_time" android:layout_width="match_parent"
+          android:layout_height="wrap_content" android:layout_marginTop="12dp"
+          android:textSize="40sp" android:textStyle="bold" android:textColor="@color/text"
+          android:letterSpacing="-0.02" />
+      <TextView android:id="@+id/p_countdown" android:layout_width="match_parent"
+          android:layout_height="wrap_content" android:layout_marginTop="4dp" style="@style/Sub" />
+    </LinearLayout>
+
+    <!-- 悬浮窗 -->
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:layout_marginTop="24dp" android:layout_marginLeft="4dp"
+        android:text="@string/punch_sec_overlay" style="@style/CardTitle" />
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="vertical" android:layout_marginTop="10dp"
+        android:padding="18dp" android:background="@drawable/card">
+
+      <TextView android:id="@+id/p_perm" android:layout_width="match_parent"
+          android:layout_height="wrap_content" style="@style/Sub" />
+      <TextView android:id="@+id/p_grant" android:layout_width="match_parent"
+          android:layout_height="46dp" android:layout_marginTop="12dp"
+          android:background="@drawable/btn_ghost" android:gravity="center"
+          android:text="@string/punch_grant" android:textSize="15sp"
+          android:textColor="@color/text" android:clickable="true" android:focusable="true" />
+
+      <TextView android:id="@+id/p_toggle" android:layout_width="match_parent"
+          android:layout_height="52dp" android:layout_marginTop="12dp"
+          android:background="@drawable/btn_wake_sel" android:gravity="center"
+          android:textSize="16sp" android:textStyle="bold"
+          android:textColor="#FF06150D" android:clickable="true" android:focusable="true" />
+      <TextView android:id="@+id/p_hint" android:layout_width="match_parent"
+          android:layout_height="wrap_content" android:layout_marginTop="8dp"
+          android:gravity="center" style="@style/Sub" />
+    </LinearLayout>
+
+    <!-- 自启动与保活 -->
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:layout_marginTop="24dp" android:layout_marginLeft="4dp"
+        android:text="@string/punch_sec_boot" style="@style/CardTitle" />
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="vertical" android:layout_marginTop="10dp"
+        android:padding="18dp" android:background="@drawable/card">
+
+      <TextView android:id="@+id/p_boot_info" android:layout_width="match_parent"
+          android:layout_height="wrap_content" android:textSize="13sp"
+          android:textColor="@color/accent" android:text="@string/punch_boot_ready" />
+
+      <TextView android:id="@+id/p_batt" android:layout_width="match_parent"
+          android:layout_height="wrap_content" android:layout_marginTop="10dp" style="@style/Sub" />
+
+      <TextView android:id="@+id/p_batt_btn" android:layout_width="match_parent"
+          android:layout_height="46dp" android:layout_marginTop="12dp"
+          android:background="@drawable/btn_ghost" android:gravity="center"
+          android:text="@string/punch_batt_btn" android:textSize="15sp"
+          android:textColor="@color/text" android:clickable="true" android:focusable="true" />
+
+      <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+          android:layout_marginTop="12dp" android:textSize="12sp"
+          android:textColor="@color/text_dim" android:lineSpacingExtra="3dp"
+          android:text="@string/punch_miui_hint" />
+    </LinearLayout>
+
+    <!-- 历史 -->
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:layout_marginTop="24dp" android:layout_marginLeft="4dp"
+        android:text="@string/punch_sec_history" style="@style/CardTitle" />
+    <LinearLayout android:id="@+id/p_history" android:layout_width="match_parent"
+        android:layout_height="wrap_content" android:orientation="vertical"
+        android:layout_marginTop="10dp" />
+  </LinearLayout>
+</ScrollView>

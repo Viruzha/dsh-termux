@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:fillViewport="true" android:scrollbars="none">
+  <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+      android:orientation="vertical" android:padding="22dp">
+
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:text="@string/tab_settings" style="@style/H1" />
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:layout_marginTop="6dp" android:text="@string/settings_sub" style="@style/Sub" />
+
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:layout_marginTop="24dp" android:layout_marginLeft="4dp"
+        android:text="@string/sec_conn" style="@style/CardTitle" />
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="vertical" android:layout_marginTop="10dp"
+        android:padding="18dp" android:background="@drawable/card">
+
+      <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+          android:text="@string/f_endpoint" style="@style/RowLabel" />
+      <EditText android:id="@+id/set_endpoint" android:layout_width="match_parent"
+          android:layout_height="wrap_content" android:layout_marginTop="7dp"
+          android:background="@drawable/input_bg" android:padding="12dp" android:textSize="13sp"
+          android:textColor="@color/text" android:textColorHint="@color/text_faint"
+          android:inputType="textUri" android:singleLine="true" />
+
+      <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+          android:layout_marginTop="16dp" android:text="@string/f_token" style="@style/RowLabel" />
+      <EditText android:id="@+id/set_token" android:layout_width="match_parent"
+          android:layout_height="wrap_content" android:layout_marginTop="7dp"
+          android:background="@drawable/input_bg" android:padding="12dp" android:textSize="13sp"
+          android:textColor="@color/text" android:textColorHint="@color/text_faint"
+          android:inputType="textPassword" android:singleLine="true" />
+      <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+          android:layout_marginTop="6dp" android:text="@string/f_token_hint" style="@style/Sub" />
+    </LinearLayout>
+
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:layout_marginTop="24dp" android:layout_marginLeft="4dp"
+        android:text="@string/sec_device" style="@style/CardTitle" />
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="vertical" android:layout_marginTop="10dp"
+        android:padding="18dp" android:background="@drawable/card">
+
+      <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+          android:text="@string/f_name" style="@style/RowLabel" />
+      <EditText android:id="@+id/set_name" android:layout_width="match_parent"
+          android:layout_height="wrap_content" android:layout_marginTop="7dp"
+          android:background="@drawable/input_bg" android:padding="12dp" android:textSize="14sp"
+          android:textColor="@color/text" android:inputType="text" android:singleLine="true" />
+
+      <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+          android:layout_marginTop="16dp" android:text="@string/f_mac" style="@style/RowLabel" />
+      <EditText android:id="@+id/set_mac" android:layout_width="match_parent"
+          android:layout_height="wrap_content" android:layout_marginTop="7dp"
+          android:background="@drawable/input_bg" android:padding="12dp" android:textSize="14sp"
+          android:textColor="@color/text" android:inputType="text" android:singleLine="true" />
+      <TextView android:layout_width="match_parent" android:layout_height="wrap_content"
+          android:layout_marginTop="6dp" android:text="@string/f_mac_hint" style="@style/Sub" />
+    </LinearLayout>
+
+    <TextView android:id="@+id/btn_save" android:layout_width="match_parent"
+        android:layout_height="52dp" android:layout_marginTop="22dp"
+        android:background="@drawable/btn_wake_sel" android:gravity="center"
+        android:text="@string/btn_save" android:textSize="16sp" android:textStyle="bold"
+        android:textColor="#FF06150D" android:clickable="true" android:focusable="true" />
+
+    <TextView android:id="@+id/save_msg" android:layout_width="match_parent"
+        android:layout_height="wrap_content" android:layout_marginTop="12dp"
+        android:gravity="center" style="@style/Sub" />
+
+    <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+        android:layout_marginTop="26dp" android:layout_marginLeft="4dp"
+        android:text="@string/sec_about" style="@style/CardTitle" />
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:orientation="vertical" android:layout_marginTop="10dp"
+        android:padding="18dp" android:background="@drawable/card">
+      <TextView android:id="@+id/about_text" android:layout_width="match_parent"
+          android:layout_height="wrap_content" style="@style/Sub" />
+    </LinearLayout>
+  </LinearLayout>
+</ScrollView>

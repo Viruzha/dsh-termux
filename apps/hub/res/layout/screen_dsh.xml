@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent">
+
+    <WebView android:id="@+id/dsh_web"
+        android:layout_width="match_parent" android:layout_height="match_parent"
+        android:visibility="gone" />
+
+    <ScrollView android:id="@+id/dsh_log_scroll"
+        android:layout_width="match_parent" android:layout_height="match_parent"
+        android:scrollbars="none">
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:orientation="vertical" android:padding="22dp">
+
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:text="@string/tab_dsh" style="@style/H1" />
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_marginTop="6dp" android:text="@string/dsh_sub" style="@style/Sub" />
+
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:orientation="vertical" android:layout_marginTop="20dp"
+                android:padding="18dp" android:background="@drawable/card">
+
+                <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                    android:orientation="horizontal" android:gravity="center_vertical">
+                    <View android:id="@+id/dsh_dot" android:layout_width="9dp" android:layout_height="9dp"
+                        android:background="@drawable/dot_off" />
+                    <TextView android:id="@+id/dsh_state" android:layout_width="0dp"
+                        android:layout_height="wrap_content" android:layout_weight="1"
+                        android:layout_marginLeft="9dp" android:textSize="13sp"
+                        android:textColor="@color/text_dim" android:text="@string/dsh_idle" />
+                </LinearLayout>
+
+                <TextView android:id="@+id/dsh_start" android:layout_width="match_parent"
+                    android:layout_height="104dp" android:layout_marginTop="16dp"
+                    android:background="@drawable/btn_wake_sel" android:gravity="center"
+                    android:text="@string/dsh_start" android:textSize="19sp" android:textStyle="bold"
+                    android:textColor="#FF06150D" android:letterSpacing="0.16"
+                    android:clickable="true" android:focusable="true" />
+
+                <TextView android:id="@+id/dsh_action" android:layout_width="match_parent"
+                    android:layout_height="wrap_content" android:layout_marginTop="12dp"
+                    android:gravity="center" style="@style/Sub" />
+            </LinearLayout>
+
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content"
+                android:layout_marginTop="22dp" android:layout_marginLeft="4dp"
+                android:text="@string/dsh_log" style="@style/CardTitle" />
+            <TextView android:id="@+id/dsh_log" android:layout_width="match_parent"
+                android:layout_height="wrap_content" android:layout_marginTop="8dp"
+                android:padding="14dp" android:background="@color/surface"
+                android:textSize="11sp" android:textColor="@color/text_dim"
+                android:fontFamily="monospace" android:lineSpacingExtra="2dp" />
+        </LinearLayout>
+    </ScrollView>
+</FrameLayout>

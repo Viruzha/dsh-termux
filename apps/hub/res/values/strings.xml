@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Viruzha 工具箱</string>
+
+    <string name="tab_wake">唤醒</string>
+    <string name="tab_devices">设备</string>
+    <string name="tab_settings">设置</string>
+    <string name="tab_dsh">DSH</string>
+    <string name="tab_punch">打卡</string>
+    <string name="punch_sub">悬浮按钮 · 每天凌晨 5 点刷新</string>
+    <string name="punch_sec_overlay">悬浮按钮</string>
+    <string name="punch_sec_history">历史记录</string>
+    <string name="punch_grant">去授予悬浮窗权限</string>
+    <string name="punch_on">开启悬浮按钮</string>
+    <string name="punch_off">关闭悬浮按钮</string>
+    <string name="punch_no_perm">尚未授予「显示在其他应用上层」权限</string>
+    <string name="punch_has_perm">权限已授予</string>
+    <string name="punch_batt_ok">电池优化：已豁免</string>
+    <string name="punch_batt_no">电池优化：未豁免（系统可能回收悬浮窗）</string>
+    <string name="punch_state_done">今天已打卡</string>
+    <string name="punch_state_todo">今天还没打卡</string>
+    <string name="punch_none">暂无打卡记录</string>
+    <string name="punch_sec_boot">自启动与保活</string>
+    <string name="punch_boot_ready">开机自启已就绪（应用侧）</string>
+    <string name="punch_batt_btn">申请电池优化豁免</string>
+    <string name="punch_miui_hint">国产系统（MIUI/EMUI 等）还需手动开启：\n设置 → 应用 → Viruzha 工具箱 → 自启动 / 后台弹出界面。\n这一步任何 App 都无法绕过，不开的话开机广播会被系统直接拦掉。</string>
+    <string name="dsh_sub">内置运行时，无需 Termux</string>
+    <string name="dsh_idle">未启动</string>
+    <string name="dsh_start">启 动</string>
+    <string name="dsh_log">启动日志</string>
+    <string name="dsh_ok">运行中</string>
+    <string name="dsh_bad">启动失败</string>
+
+    <string name="wake_sub">点一下，让家里的电脑醒来</string>
+    <string name="state_checking">检测中…</string>
+    <string name="state_ok">服务端已连接</string>
+    <string name="state_bad">服务端不可达</string>
+    <string name="btn_wake">唤 醒</string>
+    <string name="btn_check">检测</string>
+    <string name="btn_save">保存</string>
+
+    <string name="last_wake">最近一次</string>
+    <string name="none">暂无记录</string>
+    <string name="last_hint">还没有触发过唤醒</string>
+
+    <string name="devices_sub">已管理的设备</string>
+    <string name="add_device">＋  添加设备</string>
+    <string name="add_device_hint">当前版本管理一台设备；多设备与分组会在后续版本加上。</string>
+    <string name="device_online">在线</string>
+    <string name="device_offline">已关机</string>
+    <string name="device_unknown">状态未知</string>
+
+    <string name="settings_sub">配置与关于</string>
+    <string name="sec_conn">连接</string>
+    <string name="sec_device">设备</string>
+    <string name="sec_about">关于</string>
+    <string name="f_endpoint">服务端地址</string>
+    <string name="f_token">鉴权 token</string>
+    <string name="f_token_hint">取自服务端 /etc/wol-api.env，64 位十六进制</string>
+    <string name="f_name">设备名称</string>
+    <string name="f_mac">MAC 地址</string>
+    <string name="f_mac_hint">服务端用它发送唤醒魔术包</string>
+    <string name="saved">已保存</string>
+
+    <string name="default_name">家里电脑</string>
+    <string name="default_mac">2C:F0:5D:0E:61:C8</string>
+    <string name="masked">••••••••</string>
+</resources>

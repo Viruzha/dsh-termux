@@ -20,5 +20,7 @@ apps/apk-lab/apktool-test/apktool.jar
 apps/apk-lab/dl/
 apps/*/local.properties
 apps/*/build/
+# hub 的运行时从仓库 runtime/ 暂存，不重复入库
+apps/hub/assets/
 apps/apk-lab/gradle-test/**/build/
 apps/apk-lab/gradle-test/.gradle/

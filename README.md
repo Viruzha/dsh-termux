@@ -20,7 +20,8 @@ dsh-termux/
 │   └── ripgrep-android.sh        glob/grep 的 ripgrep 垫片
 ├── runtime/                自包含 App 的 Android 运行时（node / ripgrep / 共享库）
 ├── apps/                   配套 App 工程（源码 + 脚本 + 产物，不含可重下的大件）
-│   ├── wake-app/           一键唤醒：Tailscale Funnel + 三 Tab 深色 UI
+│   ├── hub/                Viruzha 工具箱：唤醒 + 打卡 + DSH 五 Tab 一体化（推荐）
+│   ├── wake-app/           一键唤醒：Tailscale Funnel + 三 Tab 深色 UI（hub 的前身）
 │   └── apk-lab/            无 Gradle 构建 APK 的工具链、三条路线与实测报告
 ├── tools/
 │   ├── setup-ssh-server.sh       在已 root 设备上配置 Termux sshd（密钥+开机自启）
@@ -109,7 +110,26 @@ LD_LIBRARY_PATH=./runtime/lib ./runtime/bin/node -v   # → v26.3.1
 
 详见 `runtime/README.md`。
 
-### `apps/wake-app/` —— 一键唤醒
+### `apps/hub/` —— Viruzha 工具箱（一体化，推荐）
+
+把「唤醒」「打卡」「DSH」合成一个五 Tab App，**发给别人装上就能用**：
+
+| Tab | 说明 |
+|---|---|
+| 唤醒 | Tailscale Funnel 公网入口，手机端无需 VPN |
+| 设备 | 设备列表与在线检测 |
+| 打卡 | 悬浮按钮常驻最上层，点一下记录时间，每天凌晨 5 点刷新 |
+| DSH | **内嵌完整 node 运行时**，本地起 DSH web 并在 WebView 中显示 |
+| 设置 | 唤醒地址 / token / 设备信息 |
+
+三个容易踩的点写在 `apps/hub/README.md` 里：`targetSdk` 必须 28、
+凌晨 5 点的边界要用日历字段算、「用户想开着」与「服务在跑」要分开记。
+
+```bash
+cd apps/hub && ./build.sh       # 产出 build/hub.apk（约 35 MB）
+```
+
+### `apps/wake-app/` —— 一键唤醒（hub 的前身）
 
 远程唤醒家里电脑，**手机端不需要开任何 VPN**。链路：
 
