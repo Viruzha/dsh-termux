@@ -72,22 +72,30 @@ public class PunchBubble extends TextView implements View.OnTouchListener {
 
     public void setDragHandler(DragHandler h) { onDrag = h; }
 
-    /** 按当前打卡状态刷新外观。 */
+    /**
+     * 按当前打卡状态刷新外观。
+     *
+     * 配色刻意做成「未打卡最响、已打卡安静」：
+     * 这个悬浮框存在的意义是**提醒别忘了打卡**，所以需要人注意的那个状态
+     * 必须是视觉上最跳的。最初把它做成深灰底，等于把主次搞反了。
+     */
     public void refresh() {
         long t = store.today(System.currentTimeMillis());
         GradientDrawable bg = new GradientDrawable();
         bg.setShape(GradientDrawable.RECTANGLE);
         bg.setCornerRadius(dp(22));
         if (t > 0) {
+            // 已打卡：绿色，表示"完成"，不必抢注意力
             bg.setColor(Color.parseColor("#FF3DDC84"));
             bg.setStroke(dp(1), Color.parseColor("#FF6BF0AA"));
             setText(PunchStore.hhmm(t));
             setTextColor(Color.parseColor("#FF06150D"));
         } else {
-            bg.setColor(Color.parseColor("#FF1C2732"));
-            bg.setStroke(dp(1), Color.parseColor("#FF35506B"));
+            // 未打卡：饱和红底 + 白字，对比度最高，最容易被余光扫到
+            bg.setColor(Color.parseColor("#FFE53935"));
+            bg.setStroke(dp(1), Color.parseColor("#FFFF8A80"));
             setText("未打卡");
-            setTextColor(Color.parseColor("#FFEDF3F7"));
+            setTextColor(Color.parseColor("#FFFFFFFF"));
         }
         setBackground(bg);
         android.util.Log.i("HUB", "悬浮框刷新 -> " + getText());
