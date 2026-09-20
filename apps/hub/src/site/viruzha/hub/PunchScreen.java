@@ -257,6 +257,7 @@ public class PunchScreen extends Screen implements View.OnClickListener, PunchSe
                 s.lastDay = d;
             } else if (!d.equals(s.lastDay)) {
                 s.lastDay = d;
+                PunchService.refreshNow();   // 页面和悬浮框要一起翻篇
                 s.refresh();
             }
             s.ui.postDelayed(this, 1000);

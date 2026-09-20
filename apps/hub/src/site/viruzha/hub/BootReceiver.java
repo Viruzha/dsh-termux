@@ -17,6 +17,9 @@ import android.util.Log;
  *
  * ⚠️ MIUI / EMUI 等国产系统另有「自启动」白名单，不打开的话系统会直接拦掉本广播。
  * 那一步只能由用户在系统设置里手动完成，任何 App 都绕不过。
+ *
+ * 另外也监听 MY_PACKAGE_REPLACED：**应用被更新后进程会被杀，服务随之消失**。
+ * 不处理的话，每次装新版本悬浮窗都会不见，得手动再开一次。
  */
 public class BootReceiver extends BroadcastReceiver {
 
@@ -25,10 +28,12 @@ public class BootReceiver extends BroadcastReceiver {
         Log.i("HUB", "BootReceiver 收到广播: " + action);
         if (action == null) return;
 
-        // 部分厂商（小米/OPPO/vivo/HTC）用自己的快速开机广播
+        // 开机广播（含部分厂商小米/OPPO/vivo/HTC 的快速开机），
+        // 以及「本应用被更新」—— 后者不处理的话，每次装新版悬浮窗都会消失
         boolean boot = Intent.ACTION_BOOT_COMPLETED.equals(action)
                 || "android.intent.action.QUICKBOOT_POWERON".equals(action)
-                || "com.htc.intent.action.QUICKBOOT_POWERON".equals(action);
+                || "com.htc.intent.action.QUICKBOOT_POWERON".equals(action)
+                || Intent.ACTION_MY_PACKAGE_REPLACED.equals(action);
         if (!boot) return;
 
         PunchStore store = new PunchStore(c);

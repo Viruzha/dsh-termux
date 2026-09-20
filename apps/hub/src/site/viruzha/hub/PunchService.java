@@ -1,5 +1,6 @@
 package site.viruzha.hub;
 
+import android.app.AlarmManager;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -7,15 +8,20 @@ import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.graphics.PixelFormat;
 import android.os.Build;
 import android.os.IBinder;
 import android.provider.Settings;
+import android.util.Log;
 import android.view.Gravity;
 import android.view.WindowManager;
 import android.widget.Toast;
 
 import java.lang.ref.WeakReference;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
 
 /**
  * 打卡悬浮窗的前台服务。
@@ -27,6 +33,7 @@ public class PunchService extends Service implements PunchBubble.Listener, Punch
 
     private static final String CHANNEL = "punch";
     private static final int NOTI_ID = 1001;
+    private static final int REQ_RESET = 2001;   // 闹钟的 PendingIntent 请求码
 
     /**
      * 界面可见时注册，用于打卡后即时刷新（避免为此引入广播接收器）。
@@ -51,10 +58,47 @@ public class PunchService extends Service implements PunchBubble.Listener, Punch
     /** 服务实例引用：界面删完记录后要立刻刷新悬浮框。onDestroy 会清掉。 */
     private static PunchService instance;
 
-    /** 让悬浮框按最新数据重绘（界面删记录后调用）。 */
+    /** 让悬浮框按最新数据重绘（界面删记录、跨天、亮屏时调用）。 */
     public static void refreshNow() {
         if (instance != null) instance.refreshBubble();
     }
+
+    /**
+     * 排下一次「打卡日切换」（凌晨 5 点）的闹钟。
+     *
+     * 用 RTC（**不是** RTC_WAKEUP）：不为改一个颜色把设备从休眠里叫醒。
+     * RTC 闹钟会在设备自然醒来时投递 —— 那正好是用户要看手机的时机。
+     * 用 set() 而非 setExact*：晚几分钟无所谓，且不需要任何特殊权限。
+     */
+    public static void scheduleReset(Context c) {
+        AlarmManager am = (AlarmManager) c.getSystemService(Context.ALARM_SERVICE);
+        if (am == null) return;
+
+        Intent i = new Intent(c, PunchTickReceiver.class);
+        int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) flags |= PendingIntent.FLAG_IMMUTABLE;
+        PendingIntent pi = PendingIntent.getBroadcast(c, REQ_RESET, i, flags);
+
+        long now = System.currentTimeMillis();
+        long at = now + PunchStore.msUntilReset(now);
+        am.set(AlarmManager.RTC, at, pi);
+
+        Log.i("HUB", "已排下次刷新: " + new SimpleDateFormat("MM-dd HH:mm:ss", Locale.US)
+                .format(new Date(at)));
+    }
+
+    public static void cancelReset(Context c) {
+        AlarmManager am = (AlarmManager) c.getSystemService(Context.ALARM_SERVICE);
+        if (am == null) return;
+        Intent i = new Intent(c, PunchTickReceiver.class);
+        int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) flags |= PendingIntent.FLAG_IMMUTABLE;
+        PendingIntent pi = PendingIntent.getBroadcast(c, REQ_RESET, i, flags);
+        am.cancel(pi);
+        pi.cancel();
+    }
+
+    private final PunchTickReceiver tickReceiver = new PunchTickReceiver();
 
     private WindowManager wm;
     private PunchBubble bubble;
@@ -82,6 +126,19 @@ public class PunchService extends Service implements PunchBubble.Listener, Punch
         showBubble();
         running = true;
         instance = this;
+
+        // 亮屏/解锁/改时间时重算状态：设备醒来正好是用户要看手机的时候。
+        // 这几个是隐式广播，只能动态注册（前台服务里注册很稳）。
+        IntentFilter f = new IntentFilter();
+        f.addAction(Intent.ACTION_SCREEN_ON);
+        f.addAction(Intent.ACTION_USER_PRESENT);
+        f.addAction(Intent.ACTION_TIME_CHANGED);
+        f.addAction(Intent.ACTION_TIMEZONE_CHANGED);
+        try { registerReceiver(tickReceiver, f); } catch (Exception e) {
+            Log.w("HUB", "注册亮屏接收器失败: " + e.getMessage());
+        }
+
+        scheduleReset(this);
     }
 
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
@@ -205,6 +262,8 @@ public class PunchService extends Service implements PunchBubble.Listener, Punch
     @Override public void onDestroy() {
         running = false;
         instance = null;
+        try { unregisterReceiver(tickReceiver); } catch (Exception ignored) { }
+        cancelReset(this);
         if (bubble != null && wm != null) {
             store.saveBubblePos(lp.x, lp.y);
             try { wm.removeView(bubble); } catch (Exception ignored) { }

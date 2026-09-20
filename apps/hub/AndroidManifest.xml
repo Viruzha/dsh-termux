@@ -36,8 +36,14 @@
                 <action android:name="android.intent.action.QUICKBOOT_POWERON" />
                 <action android:name="com.htc.intent.action.QUICKBOOT_POWERON" />
                 <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+                <!-- 应用被更新后进程会被杀，需要重新拉起悬浮窗 -->
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
+
+        <!-- 凌晨 5 点重算打卡状态（由 AlarmManager 显式唤起，不接收外部广播） -->
+        <receiver android:name=".PunchTickReceiver"
+                  android:exported="false" />
 
         <service android:name=".PunchService"
                  android:exported="false"
