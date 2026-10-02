@@ -300,3 +300,30 @@ Canvas(modifier) { drawPattern(indices, cols, rows, scale, offset) }
 删除内容：`quantizeWithDither`、`addErr`、`nearestConstrained`、
 `DITHER_MAX_DIST`、`ConvertUiState.dither`、`setDither()`、界面上的开关。
 量化只保留「直接取最近色」这一条路径。
+
+## v1.8 修复：清理已用库存把历史记录一起删了
+
+**现象**：「清理已用库存」把转换历史也清空了 —— 这是两回事。
+
+**根因（从 plan.md 继承的）**：仓库层里
+
+```kotlin
+suspend fun resetUsed() {
+    dao.resetUsed()
+    dao.clearRecords()   // ← 误删
+}
+```
+
+原方案就有 `resetUsed() → dao.clearLog()`。**那时"日志"是每色一行的用量明细、
+和 `used` 计数器绑定**，一起清还说得通。但 v1.1 把日志改成**带图片的转换记录**
+之后，语义已经变成独立历史了 —— 我照搬了那行，没有重新审视。
+
+`initAll()`（批量设置库存）有同样的问题。
+
+**修法**：两个方法都只动库存，不碰历史。
+
+**顺带补上独立的清空入口**：`clearRecords()` 原来**没接到任何界面**，
+修完就没地方清历史了。现在记录页顶部有「清空全部」（带确认，明确写"库存不受影响"）。
+
+> 教训：**重构数据结构时要回头审一遍所有操作它的旧代码**。
+> 类型换了、语义变了，但那一行 `clearLog()` 看起来还是"合理的"。

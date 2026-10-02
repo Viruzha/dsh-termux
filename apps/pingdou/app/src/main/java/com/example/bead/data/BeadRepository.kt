@@ -28,15 +28,22 @@ class BeadRepository(private val dao: BeadStore) {
     suspend fun addTotal(name: String, delta: Int) =
         dao.addTotal(name, delta)
 
+    /**
+     * 批量设置每种颜色的库存总量，并把已用清零。
+     *
+     * ⚠️ **不动历史记录** —— 库存是「现在有多少豆」，历史是「以前做过什么」，
+     * 两者无关。原本这里跟着原方案写了 `clearRecords()`，但那时"日志"是
+     * 每色一行的用量明细、和 used 计数器绑定；改成带图片的转换记录之后，
+     * 它已经是独立历史了，再一起清就是误删。
+     */
     suspend fun initAll(n: Int) {
         Palette.colors.forEach { dao.setTotal(it.name, n) }
         dao.resetUsed()
-        dao.clearRecords()
     }
 
+    /** 把「已用」计数清零（不改总量，更不碰历史记录）。 */
     suspend fun resetUsed() {
         dao.resetUsed()
-        dao.clearRecords()
     }
 
     /** 当前剩余库存快照 {颜色: 剩余} */

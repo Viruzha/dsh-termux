@@ -758,6 +758,7 @@ private fun EditStockDialog(
 @Composable
 fun LogScreen(vm: InventoryViewModel = viewModel()) {
     val records by vm.records.collectAsStateWithLifecycle()
+    var confirmClear by remember { mutableStateOf(false) }
 
     if (records.isEmpty()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -766,12 +767,51 @@ fun LogScreen(vm: InventoryViewModel = viewModel()) {
         return
     }
 
-    LazyColumn(
-        Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        items(records, key = { it.id }) { rec -> RecordCard(rec, vm) }
+    Column(Modifier.fillMaxSize()) {
+        // 清空历史是**独立**操作：库存页的「清理已用」不该动历史，反之亦然
+        Row(
+            Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "共 ${records.size} 条记录",
+                Modifier.weight(1f),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            TextButton(onClick = { confirmClear = true }) {
+                Text("清空全部", color = MaterialTheme.colorScheme.error)
+            }
+        }
+
+        LazyColumn(
+            Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(start = 12.dp, end = 12.dp, bottom = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            items(records, key = { it.id }) { rec -> RecordCard(rec, vm) }
+        }
+    }
+
+    if (confirmClear) {
+        AlertDialog(
+            onDismissRequest = { confirmClear = false },
+            title = { Text("清空全部记录？") },
+            text = {
+                Text(
+                    "${records.size} 条记录及其原图、转换图会被永久删除，无法恢复。\n\n" +
+                            "库存总量与「已用」计数不受影响。"
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.clearRecords(); confirmClear = false
+                }) { Text("清空", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmClear = false }) { Text("取消") }
+            },
+        )
     }
 }
 
