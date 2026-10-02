@@ -2,7 +2,7 @@
 config/credentials.yaml
 config/sessions/
 config/attachments/
-data/
+/data/          # 只忽略仓库根部的 data/，别误伤源码里的 data 包
 *.keystore
 
 # ── 生成物与备份 ─────────────────────────────────────────
@@ -28,3 +28,8 @@ apps/hub/dist/
 apps/hub/assets/
 apps/apk-lab/gradle-test/**/build/
 apps/apk-lab/gradle-test/.gradle/
+
+# 拼豆工程的构建产物与 SDK 指针
+apps/pingdou/app/build/
+apps/pingdou/local.properties
+apps/pingdou/.gradle/

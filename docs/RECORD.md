@@ -315,6 +315,52 @@ token 走查询串而非请求头。
 
 ---
 
+## ⑪ 拼豆工坊：Kotlin + Compose 的 Gradle 路线
+
+**起因**：`pingdou/plan.md`（1307 行）是一份完整的 Kotlin + Compose + Room
+拼豆 App 方案。用户要求「加到 App 里」，但因为**架构不兼容**（hub 是 Java + 无
+Gradle，plan 要 Compose + Room），最终决定**单独做成一个 App**。
+
+**结论：构建成功，17 MB APK，已装到手机。**
+
+### 算法质量（原样保留，未改）
+
+面积平均下采样、redmean 加权距离、Floyd–Steinberg 抖动、
+按用量降序的库存分配（优先原色 → 缺口找最近的**有货**色 → 记录替代来源 → 报告短缺）——
+都是正确做法。
+
+### 三个真正的坑
+
+1. **AGP 9 内置 Kotlin**。手动应用 `org.jetbrains.kotlin.android` 会报
+   `Cannot add extension with name 'kotlin'`。删掉即可，AGP 自己编译 `.kt`。
+2. **KSP 与内置 Kotlin 不兼容**（`unexpected jvm signature V`）。
+   `android.disallowKotlinSourceSets=false` 能过配置阶段，但随后就撞上签名错误。
+   **最终去掉 Room**：存储需求很轻，改成 `BeadStore`（StateFlow + JSON），
+   接口与原 DAO 等价 —— **仓库层以上一行都没改**，还省掉一个注解处理器。
+3. **Compose 1.9+ 要求 compileSdk 35**，而 Termux 的 aapt2 **上限是 34**（硬限制）。
+   必须用 Compose BOM `2024.09.02`（1.7.x）。**plan.md 原本写的就是这个版本**，
+   是我先改成 2025.09 才踩的坑。
+
+### 还修了 plan 的两处代码问题 + 补齐三个构建文件
+
+`Image` 未导入、`clickable` 全限定调用解析失败、`rememberRipple` 已废弃（error 级）；
+以及原方案缺 `settings.gradle.kts` / `gradle.properties` / `local.properties`
+—— 缺任何一样都构建不起来。
+
+### 两个环境层面的障碍
+
+- **Gradle 拉依赖时 TLS 被掐断**（`Remote host terminated the handshake`），
+  但 curl 与 Java 单独请求都正常。疑似本机代理。**多跑几轮即可**，通常 5~8 轮补齐。
+- **MIUI 对全新包弹安装确认**（`AdbInstallActivity`），锁屏时 12 秒自动取消并报
+  `INSTALL_FAILED_USER_RESTRICTED`。解锁后点确认即可；已装过的包更新时不弹。
+
+### 意外收获
+
+**Kotlin + Compose 能在 Termux 上编译** —— 这是之前 apk-lab 只验证过
+Java + AndroidX 时未能确认的。现在完整版本矩阵已验证可用。
+
+---
+
 ## 通用规律（跨条线，值得记）
 
 1. **不要用缓存判断状态**。ARP 表、DHCP 租约、DNS 缓存都会滞后 —— 主动探测慢一点，但不会骗你。
@@ -375,6 +421,9 @@ token 走查询串而非请求头。
 - [ ] hub 的 DSH 服务应改为**前台服务**（现在随 Activity 存活）
 - [ ] DSH 本体（54 MB）建议改为**首次运行下载**，别塞进 APK
 - [ ] node 里仍编译了 Termux 的 `bin/bash`、`sh`、`/tmp` 路径（child_process 用），未验证影响
+- [ ] 拼豆 App 尚未真机验证功能（已安装，等用户测试）
+- [ ] `gradle-test/sdk` 仓库副本缺可执行文件（符号链接没提交），
+      指向它会报 build-tools corrupted；要用工作区那份
 - [ ] **DSH 本体拿不到的问题**（见第 ⑩ 节）：App 无法自行恢复 `dsh-bundle.zip`；
       可选修法 = 首次运行下载 / 加导入按钮 / 至少调整检查顺序（先查包再解压运行时）
 - [ ] 打卡记录**没有导出功能**，`pm clear` 会全丢

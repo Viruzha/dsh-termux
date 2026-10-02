@@ -20,6 +20,7 @@ dsh-termux/
 │   └── ripgrep-android.sh        glob/grep 的 ripgrep 垫片
 ├── runtime/                自包含 App 的 Android 运行时（node / ripgrep / 共享库）
 ├── apps/                   配套 App 工程（源码 + 脚本 + 产物，不含可重下的大件）
+│   ├── pingdou/            拼豆工坊：图片转拼豆像素图 + 库存联动（Kotlin + Compose）
 │   ├── hub/                Viruzha 工具箱：唤醒 + 打卡 + DSH 五 Tab 一体化（推荐）
 │   ├── wake-app/           一键唤醒：Tailscale Funnel + 三 Tab 深色 UI（hub 的前身）
 │   └── apk-lab/            无 Gradle 构建 APK 的工具链、三条路线与实测报告
@@ -110,6 +111,22 @@ LD_LIBRARY_PATH=./runtime/lib ./runtime/bin/node -v   # → v26.3.1
 ```
 
 详见 `runtime/README.md`。
+
+### `apps/pingdou/` —— 拼豆工坊（Kotlin + Compose）
+
+图片转拼豆像素图，按库存分配颜色，缺色自动找相近替代。
+
+**与 hub 不同，这个走 Gradle 路线** —— 因为 Compose 编译器与注解处理器都是
+Gradle 插件，脱离 Gradle 做不了。实测版本矩阵：
+Gradle 9.6.0 + AGP 9.4.0 + Kotlin 2.2.10（AGP 内置）+ Compose BOM 2024.09.02。
+
+三个关键坑写在 `apps/pingdou/README.md`：AGP 9 内置 Kotlin 导致插件冲突、
+KSP 与内置 Kotlin 不兼容（因此去掉 Room 改用 JSON 存储）、
+Compose 1.9+ 要求 compileSdk 35 而 aapt2 上限是 34。
+
+```bash
+cd apps/pingdou && gradle assembleDebug    # 产出 17 MB APK
+```
 
 ### `apps/hub/` —— Viruzha 工具箱（一体化，推荐）
 
