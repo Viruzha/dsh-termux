@@ -42,7 +42,49 @@ data class ConversionRecord(
     val rows: Int,
     val totalBeads: Int,
     val entries: List<RecordEntry>,
-)
+    /**
+     * 每格调色板下标的游程编码（见 [encodeIndices]）。
+     *
+     * 存下来是为了让**历史页也能点格查色号** —— 只存图片的话，
+     * 渲染图上有网格线和透明棋盘格，没法可靠地反推出是哪一号色。
+     */
+    val indicesRle: String = "",
+) {
+    /** 还原成下标数组；长度不足时用 EMPTY 补齐。 */
+    fun indices(): IntArray = decodeIndices(indicesRle, cols * rows)
+}
+
+/** 下标数组 → 游程编码。像素画大片同色，压缩率很高。 */
+fun encodeIndices(a: IntArray): String {
+    val sb = StringBuilder()
+    var i = 0
+    while (i < a.size) {
+        val v = a[i]
+        var n = 1
+        while (i + n < a.size && a[i + n] == v) n++
+        if (sb.isNotEmpty()) sb.append(',')
+        sb.append(v).append(':').append(n)
+        i += n
+    }
+    return sb.toString()
+}
+
+fun decodeIndices(s: String, size: Int): IntArray {
+    val out = IntArray(size)
+    var p = 0
+    if (s.isNotEmpty()) {
+        for (part in s.split(',')) {
+            val c = part.indexOf(':')
+            if (c <= 0) continue
+            val v = part.substring(0, c).toIntOrNull() ?: continue
+            val n = part.substring(c + 1).toIntOrNull() ?: continue
+            var k = 0
+            while (k < n && p < size) { out[p++] = v; k++ }
+        }
+    }
+    while (p < size) out[p++] = -1   // Pixelizer.EMPTY，避免 data 层依赖 domain
+    return out
+}
 
 /**
  * 库存与转换记录的存储。
@@ -110,6 +152,7 @@ class BeadStore(private val context: Context) {
                     rows = o.optInt("rows"),
                     totalBeads = o.optInt("total"),
                     entries = entriesList,
+                    indicesRle = o.optString("idx"),
                 )
             }
             _records.value = list.sortedByDescending { it.timestamp }
@@ -143,6 +186,7 @@ class BeadStore(private val context: Context) {
                 put("src", r.srcPath); put("out", r.outPath)
                 put("cols", r.cols); put("rows", r.rows)
                 put("total", r.totalBeads); put("entries", es)
+                put("idx", r.indicesRle)
             })
         }
         sp.edit().putString("records", arr.toString()).apply()
@@ -221,6 +265,7 @@ class BeadStore(private val context: Context) {
         rows: Int,
         totalBeads: Int,
         entries: List<RecordEntry>,
+        indices: IntArray,
     ): ConversionRecord {
         val id = nextRecordId++
         val srcPath = src?.let { saveImage(id, "src", it) } ?: ""
@@ -234,6 +279,7 @@ class BeadStore(private val context: Context) {
             cols = cols, rows = rows,
             totalBeads = totalBeads,
             entries = entries,
+            indicesRle = encodeIndices(indices),
         )
         _records.value = (listOf(rec) + _records.value).sortedByDescending { it.timestamp }
         persistRecords()

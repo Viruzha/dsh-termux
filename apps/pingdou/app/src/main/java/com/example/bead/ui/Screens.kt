@@ -3,6 +3,10 @@ package com.example.bead.ui
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
@@ -22,12 +26,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
@@ -191,7 +198,12 @@ private fun ResultCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
-            ZoomablePattern(r)
+            ZoomablePattern(
+                bmp = remember(r) { r.preview.asImageBitmap() },
+                indices = r.indices,
+                cols = r.width,
+                rows = r.height,
+            )
 
             HorizontalDivider()
             Text("用色清单", style = MaterialTheme.typography.titleSmall)
@@ -252,23 +264,28 @@ private fun ResultCard(
  * （Fit 会留黑边，点按坐标就对不上了）。这样内容坐标与图像坐标是线性关系。
  */
 @Composable
-private fun ZoomablePattern(r: Pixelizer.ConvertResult) {
+private fun ZoomablePattern(
+    bmp: ImageBitmap,
+    indices: IntArray,
+    cols: Int,
+    rows: Int,
+    maxHeight: Dp = 460.dp,
+) {
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
     var picked by remember { mutableStateOf<Pair<Int, Int>?>(null) }
-
-    val bmp = remember(r) { r.preview.asImageBitmap() }
 
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         BoxWithConstraints(
             Modifier
                 .fillMaxWidth()
+                .heightIn(max = maxHeight)
                 .clip(RoundedCornerShape(8.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant),
             contentAlignment = Alignment.Center,
         ) {
             val w = maxWidth
-            val h = w * r.height / r.width
+            val h = w * rows / cols
 
             Image(
                 bitmap = bmp,
@@ -277,20 +294,42 @@ private fun ZoomablePattern(r: Pixelizer.ConvertResult) {
                     .size(w, h)
                     .graphicsLayer(scaleX = scale, scaleY = scale)
                     .graphicsLayer(translationX = offset.x, translationY = offset.y)
-                    .pointerInput(r) {
-                        detectTransformGestures { _, pan, zoom, _ ->
-                            val ns = (scale * zoom).coerceIn(1f, 12f)
-                            scale = ns
-                            offset = if (ns <= 1f) Offset.Zero else offset + pan
-                        }
-                    }
-                    .pointerInput(r, w, h) {
-                        detectTapGestures { pos ->
-                            // pos 在内容坐标系里；图像正好铺满 w × h
-                            val cx = (pos.x / w.value * r.width).toInt()
-                            val cy = (pos.y / h.value * r.height).toInt()
-                            picked = if (cx in 0 until r.width && cy in 0 until r.height)
-                                cx to cy else null
+                    // ⚠️ 缩放与点按必须在**同一个** pointerInput 里处理。
+                    // 拆成两个 pointerInput 时，detectTransformGestures 会吃掉事件，
+                    // 后面的 detectTapGestures 收不到 —— 实测点按完全没反应。
+                    .pointerInput(cols, rows) {
+                        awaitEachGesture {
+                            val down = awaitFirstDown(requireUnconsumed = false)
+                            val downPos = down.position
+                            var moved = false
+
+                            while (true) {
+                                val ev = awaitPointerEvent()
+                                val ch = ev.changes.firstOrNull { it.id == down.id }
+                                if (ch == null || !ch.pressed) break
+
+                                val zoom = ev.calculateZoom()
+                                val pan = ev.calculatePan()
+                                if (zoom != 1f || pan != Offset.Zero) {
+                                    if (!moved &&
+                                        (pan.getDistance() > viewConfiguration.touchSlop || zoom != 1f)
+                                    ) moved = true
+                                    if (moved) {
+                                        val ns = (scale * zoom).coerceIn(1f, 12f)
+                                        scale = ns
+                                        offset = if (ns <= 1f) Offset.Zero else offset + pan
+                                        ev.changes.forEach { it.consume() }
+                                    }
+                                }
+                            }
+
+                            // 没拖动过 → 当作点按
+                            if (!moved) {
+                                val cx = (downPos.x / size.width * cols).toInt()
+                                val cy = (downPos.y / size.height * rows).toInt()
+                                picked = if (cx in 0 until cols && cy in 0 until rows)
+                                    cx to cy else null
+                            }
                         }
                     },
             )
@@ -304,20 +343,22 @@ private fun ZoomablePattern(r: Pixelizer.ConvertResult) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             else -> {
-                val ci = Pixelizer.cellIndex(r.indices, r.width, r.height, p.first, p.second)
+                val ci = if (p.first in 0 until cols && p.second in 0 until rows)
+                    indices[p.second * cols + p.first] else Pixelizer.EMPTY
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Box(
                         Modifier
                             .size(18.dp)
                             .clip(RoundedCornerShape(3.dp))
                             .background(
-                                if (ci == Pixelizer.EMPTY) MaterialTheme.colorScheme.outline
+                                if (ci < 0 || ci >= Palette.colors.size)
+                                    MaterialTheme.colorScheme.outline
                                 else Color(Palette.colors[ci].argb())
                             )
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        if (ci == Pixelizer.EMPTY)
+                        if (ci < 0 || ci >= Palette.colors.size)
                             "第 ${p.first + 1} 列 ${p.second + 1} 行：透明（不放豆）"
                         else
                             "第 ${p.first + 1} 列 ${p.second + 1} 行：${Palette.colors[ci].name}",
@@ -529,6 +570,8 @@ private fun RecordCard(rec: ConversionRecord, vm: InventoryViewModel) {
     val src = remember(rec.id, rec.srcPath) { vm.loadImage(rec.srcPath) }
     val out = remember(rec.id, rec.outPath) { vm.loadImage(rec.outPath) }
     var confirmDelete by remember { mutableStateOf(false) }
+    // 点缩略图后全屏放大；只有「转换后」的图能查色号（原图没有格点信息）
+    var zoomOut by remember { mutableStateOf(false) }
 
     Card(Modifier.fillMaxWidth()) {
         Column(
@@ -555,8 +598,8 @@ private fun RecordCard(rec: ConversionRecord, vm: InventoryViewModel) {
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Thumb("原图", src, Modifier.weight(1f))
-                Thumb("转换后", out, Modifier.weight(1f))
+                Thumb("原图", src, Modifier.weight(1f)) { }
+                Thumb("转换后", out, Modifier.weight(1f)) { zoomOut = true }
             }
 
             Text(
@@ -612,11 +655,52 @@ private fun RecordCard(rec: ConversionRecord, vm: InventoryViewModel) {
             },
         )
     }
+
+    if (zoomOut && out != null) {
+        Dialog(onDismissRequest = { zoomOut = false }) {
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surface,
+                modifier = Modifier.fillMaxWidth().padding(8.dp),
+            ) {
+                Column(
+                    Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            rec.imageName.ifBlank { "未命名" },
+                            Modifier.weight(1f),
+                            fontWeight = FontWeight.Bold,
+                        )
+                        TextButton(onClick = { zoomOut = false }) { Text("关闭") }
+                    }
+                    Text(
+                        "共 ${rec.totalBeads} 颗豆　·　${rec.cols} × ${rec.rows}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    ZoomablePattern(
+                        bmp = remember(rec.id) { out.asImageBitmap() },
+                        indices = remember(rec.id) { rec.indices() },
+                        cols = rec.cols,
+                        rows = rec.rows,
+                        maxHeight = 520.dp,
+                    )
+                }
+            }
+        }
+    }
 }
 
-/** 记录里的一张小图。 */
+/** 记录里的一张小图；点一下可全屏放大看。 */
 @Composable
-private fun Thumb(label: String, bmp: android.graphics.Bitmap?, modifier: Modifier = Modifier) {
+private fun Thumb(
+    label: String,
+    bmp: android.graphics.Bitmap?,
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
+) {
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(
             label,
@@ -628,7 +712,8 @@ private fun Thumb(label: String, bmp: android.graphics.Bitmap?, modifier: Modifi
                 .fillMaxWidth()
                 .height(140.dp)
                 .clip(RoundedCornerShape(6.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant),
+                .background(MaterialTheme.colorScheme.surfaceVariant)
+                .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
             contentAlignment = Alignment.Center,
         ) {
             if (bmp != null) {
@@ -641,6 +726,13 @@ private fun Thumb(label: String, bmp: android.graphics.Bitmap?, modifier: Modifi
             } else {
                 Text("（图片已丢失）", style = MaterialTheme.typography.labelSmall)
             }
+        }
+        if (onClick != null) {
+            Text(
+                "点一下放大",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
+            )
         }
     }
 }

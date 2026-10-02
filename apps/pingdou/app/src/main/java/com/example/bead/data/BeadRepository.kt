@@ -56,6 +56,7 @@ class BeadRepository(private val dao: BeadStore) {
         rows: Int,
         totalBeads: Int,
         entries: List<Pixelizer.UsageEntry>,
+        indices: IntArray,
     ): ConversionRecord {
         entries.forEach { dao.addUsed(it.color, it.count) }
         return dao.addRecord(
@@ -66,6 +67,7 @@ class BeadRepository(private val dao: BeadStore) {
             rows = rows,
             totalBeads = totalBeads,
             entries = entries.map { RecordEntry(it.color, it.count, it.substitutedFrom) },
+            indices = indices,
         )
     }
 }

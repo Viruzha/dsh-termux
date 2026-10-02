@@ -123,6 +123,7 @@ class ConvertViewModel(app: Application) : AndroidViewModel(app) {
                     rows = r.height,
                     totalBeads = r.totalBeads,
                     entries = r.entries,
+                    indices = r.indices,
                 )
                 val extra = if (r.emptyCells > 0) "（跳过 ${r.emptyCells} 个透明格）" else ""
                 _state.update {
