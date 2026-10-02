@@ -3,6 +3,8 @@ package com.example.bead.ui
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -18,8 +20,11 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -30,6 +35,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import coil.compose.AsyncImage
+import com.example.bead.data.ConversionRecord
 import com.example.bead.data.InventoryEntity
 import com.example.bead.data.Palette
 import com.example.bead.domain.Pixelizer
@@ -172,19 +178,20 @@ private fun ResultCard(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             Text(
-                "网格 ${r.width} × ${r.height} = ${r.width * r.height} 颗",
+                "网格 ${r.width} × ${r.height}",
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
             )
-
-            Image(
-                bitmap = r.preview.asImageBitmap(),
-                contentDescription = "预览",
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(max = 420.dp),
-                contentScale = ContentScale.Fit,
+            Text(
+                buildString {
+                    append("需要 ${r.totalBeads} 颗豆")
+                    if (r.emptyCells > 0) append("　·　跳过 ${r.emptyCells} 个透明格")
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+
+            ZoomablePattern(r)
 
             HorizontalDivider()
             Text("用色清单", style = MaterialTheme.typography.titleSmall)
@@ -228,6 +235,95 @@ private fun ResultCard(
                 }
                 OutlinedButton(onClick = onDiscard, modifier = Modifier.weight(1f)) {
                     Text("放弃")
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 可缩放、可点按取色的像素图。
+ *
+ * 实际拼豆时是对着屏幕数格子的，所以需要：
+ *  - **双指缩放 + 拖动**：放大到能看清每一格
+ *  - **点某一格显示颜色名**：直接告诉你是哪种豆，不用去猜
+ *
+ * 坐标换算的关键：图像用固定尺寸铺满，**不用 ContentScale.Fit**
+ * （Fit 会留黑边，点按坐标就对不上了）。这样内容坐标与图像坐标是线性关系。
+ */
+@Composable
+private fun ZoomablePattern(r: Pixelizer.ConvertResult) {
+    var scale by remember { mutableFloatStateOf(1f) }
+    var offset by remember { mutableStateOf(Offset.Zero) }
+    var picked by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+
+    val bmp = remember(r) { r.preview.asImageBitmap() }
+
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        BoxWithConstraints(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(8.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+            contentAlignment = Alignment.Center,
+        ) {
+            val w = maxWidth
+            val h = w * r.height / r.width
+
+            Image(
+                bitmap = bmp,
+                contentDescription = "像素图，可缩放",
+                modifier = Modifier
+                    .size(w, h)
+                    .graphicsLayer(scaleX = scale, scaleY = scale)
+                    .graphicsLayer(translationX = offset.x, translationY = offset.y)
+                    .pointerInput(r) {
+                        detectTransformGestures { _, pan, zoom, _ ->
+                            val ns = (scale * zoom).coerceIn(1f, 12f)
+                            scale = ns
+                            offset = if (ns <= 1f) Offset.Zero else offset + pan
+                        }
+                    }
+                    .pointerInput(r, w, h) {
+                        detectTapGestures { pos ->
+                            // pos 在内容坐标系里；图像正好铺满 w × h
+                            val cx = (pos.x / w.value * r.width).toInt()
+                            val cy = (pos.y / h.value * r.height).toInt()
+                            picked = if (cx in 0 until r.width && cy in 0 until r.height)
+                                cx to cy else null
+                        }
+                    },
+            )
+        }
+
+        val p = picked
+        when {
+            p == null -> Text(
+                "双指缩放看细节 · 点某一格查颜色",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            else -> {
+                val ci = Pixelizer.cellIndex(r.indices, r.width, r.height, p.first, p.second)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Box(
+                        Modifier
+                            .size(18.dp)
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(
+                                if (ci == Pixelizer.EMPTY) MaterialTheme.colorScheme.outline
+                                else Color(Palette.colors[ci].argb())
+                            )
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        if (ci == Pixelizer.EMPTY)
+                            "第 ${p.first + 1} 列 ${p.second + 1} 行：透明（不放豆）"
+                        else
+                            "第 ${p.first + 1} 列 ${p.second + 1} 行：${Palette.colors[ci].name}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Medium,
+                    )
                 }
             }
         }
@@ -403,43 +499,148 @@ private fun EditStockDialog(
 // ------------------------------------------------------------
 @Composable
 fun LogScreen(vm: InventoryViewModel = viewModel()) {
-    val logs by vm.logs.collectAsStateWithLifecycle()
+    val records by vm.records.collectAsStateWithLifecycle()
 
-    if (logs.isEmpty()) {
+    if (records.isEmpty()) {
         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text("暂无使用记录", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         return
     }
 
-    LazyColumn(Modifier.fillMaxSize()) {
-        items(logs, key = { it.id }) { log ->
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    Modifier
-                        .size(20.dp)
-                        .clip(RoundedCornerShape(4.dp))
-                        .background(Color(Palette.byName(log.color).argb()))
-                )
-                Spacer(Modifier.width(12.dp))
+    LazyColumn(
+        Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        items(records, key = { it.id }) { rec -> RecordCard(rec, vm) }
+    }
+}
+
+/**
+ * 一条转换记录：原图 + 转换后的像素图 + 总豆数 + 分色明细。
+ *
+ * 存两张图是刻意的 —— 实际拼豆时是「对着原图看效果、对着像素图数格子」，
+ * 少了哪一张都不方便。
+ */
+@Composable
+private fun RecordCard(rec: ConversionRecord, vm: InventoryViewModel) {
+    var expanded by remember { mutableStateOf(false) }
+    val src = remember(rec.id, rec.srcPath) { vm.loadImage(rec.srcPath) }
+    val out = remember(rec.id, rec.outPath) { vm.loadImage(rec.outPath) }
+    var confirmDelete by remember { mutableStateOf(false) }
+
+    Card(Modifier.fillMaxWidth()) {
+        Column(
+            Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text("${log.color} × ${log.count}", fontWeight = FontWeight.Medium)
                     Text(
-                        buildString {
-                            append(log.imageName)
-                            log.substitutedFrom?.let { append("　·　替代 $it") }
-                        },
+                        rec.imageName.ifBlank { "未命名" },
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    Text(
+                        java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.getDefault())
+                            .format(java.util.Date(rec.timestamp)),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+                TextButton(onClick = { confirmDelete = true }) {
+                    Text("删除", color = MaterialTheme.colorScheme.error)
+                }
             }
-            HorizontalDivider()
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Thumb("原图", src, Modifier.weight(1f))
+                Thumb("转换后", out, Modifier.weight(1f))
+            }
+
+            Text(
+                buildString {
+                    append("共 ${rec.totalBeads} 颗豆")
+                    append("　·　${rec.cols} × ${rec.rows}")
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+            )
+
+            TextButton(onClick = { expanded = !expanded }) {
+                Text(if (expanded) "收起分色明细" else "展开分色明细（${rec.entries.size} 色）")
+            }
+
+            if (expanded) {
+                rec.entries.sortedByDescending { it.count }.forEach { e ->
+                    val c = Palette.byName(e.color)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            Modifier
+                                .size(16.dp)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(Color(c.argb()))
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text("${e.color} × ${e.count}", Modifier.weight(1f))
+                        if (e.substitutedFrom != null) {
+                            Text(
+                                "替代 ${e.substitutedFrom}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.tertiary,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (confirmDelete) {
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text("删除这条记录？") },
+            text = { Text("原图与转换图会一并删除，且无法恢复。库存扣减不会回滚。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.deleteRecord(rec.id); confirmDelete = false
+                }) { Text("删除", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmDelete = false }) { Text("取消") }
+            },
+        )
+    }
+}
+
+/** 记录里的一张小图。 */
+@Composable
+private fun Thumb(label: String, bmp: android.graphics.Bitmap?, modifier: Modifier = Modifier) {
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(140.dp)
+                .clip(RoundedCornerShape(6.dp))
+                .background(MaterialTheme.colorScheme.surfaceVariant),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (bmp != null) {
+                Image(
+                    bitmap = bmp.asImageBitmap(),
+                    contentDescription = label,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Fit,
+                )
+            } else {
+                Text("（图片已丢失）", style = MaterialTheme.typography.labelSmall)
+            }
         }
     }
 }

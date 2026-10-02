@@ -1,13 +1,17 @@
 package com.example.bead.data
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
+import java.io.FileOutputStream
 
-/** 一种颜色的库存。字段与原 Room 实体保持一致，UI 无需改动。 */
+/** 一种颜色的库存。 */
 data class InventoryEntity(
     val name: String,
     val hex: String,
@@ -15,46 +19,59 @@ data class InventoryEntity(
     val used: Int = 0,
 )
 
-/** 一次用量记录（确认扣减时写入）。 */
-data class UsageLogEntity(
-    val id: Long = 0,
-    val timestamp: Long,
-    val imageName: String,
+/** 记录里的一条分色用量。 */
+data class RecordEntry(
     val color: String,
     val count: Int,
     val substitutedFrom: String? = null,
 )
 
 /**
- * 库存与用量记录的存储。
+ * 一次转换的记录。
+ *
+ * 除了用量，还存下**原图**与**转换后图片**的本地文件路径 ——
+ * 实际拼豆时最需要的就是这两张图（对着原图看效果、对着像素图数格子）。
+ */
+data class ConversionRecord(
+    val id: Long,
+    val timestamp: Long,
+    val imageName: String,
+    val srcPath: String,
+    val outPath: String,
+    val cols: Int,
+    val rows: Int,
+    val totalBeads: Int,
+    val entries: List<RecordEntry>,
+)
+
+/**
+ * 库存与转换记录的存储。
  *
  * 为什么不用原方案的 Room：Room 依赖 KSP，而 KSP 用 `kotlin.sourceSets`
  * 注入生成源码，与 AGP 9 的内置 Kotlin 冲突 —— 实测报
  * `kspDebugKotlin FAILED: unexpected jvm signature V`。
  *
- * 这里的存储需求很轻（一份颜色库存 + 一条用量日志），
+ * 这里的存储需求很轻（一份颜色库存 + 一串转换记录），
  * 用内存 StateFlow + JSON 持久化完全够用，还省掉一整个注解处理器。
- * 对外接口与原 DAO 等价，所以 BeadRepository 与 UI 都不受影响。
  */
-class BeadStore(context: Context) {
+class BeadStore(private val context: Context) {
 
     private val sp = context.getSharedPreferences("bead", Context.MODE_PRIVATE)
 
     private val _inventory = MutableStateFlow<List<InventoryEntity>>(emptyList())
     val inventory: StateFlow<List<InventoryEntity>> = _inventory.asStateFlow()
 
-    private val _logs = MutableStateFlow<List<UsageLogEntity>>(emptyList())
-    val logs: StateFlow<List<UsageLogEntity>> = _logs.asStateFlow()
+    private val _records = MutableStateFlow<List<ConversionRecord>>(emptyList())
+    val records: StateFlow<List<ConversionRecord>> = _records.asStateFlow()
 
-    private var nextLogId = 1L
+    private var nextRecordId = 1L
 
     init { load() }
 
     // ---- 持久化 ----------------------------------------------------------
     private fun load() {
-        val inv = sp.getString("inventory", null)
-        if (inv != null) {
-            val arr = JSONArray(inv)
+        sp.getString("inventory", null)?.let { raw ->
+            val arr = JSONArray(raw)
             val list = ArrayList<InventoryEntity>(arr.length())
             for (i in 0 until arr.length()) {
                 val o = arr.getJSONObject(i)
@@ -68,23 +85,35 @@ class BeadStore(context: Context) {
             _inventory.value = list.sortedBy { it.name }
         }
 
-        val lg = sp.getString("logs", null)
-        if (lg != null) {
-            val arr = JSONArray(lg)
-            val list = ArrayList<UsageLogEntity>(arr.length())
+        sp.getString("records", null)?.let { raw ->
+            val arr = JSONArray(raw)
+            val list = ArrayList<ConversionRecord>(arr.length())
             for (i in 0 until arr.length()) {
                 val o = arr.getJSONObject(i)
-                list += UsageLogEntity(
+                val es = o.optJSONArray("entries") ?: JSONArray()
+                val entriesList = ArrayList<RecordEntry>(es.length())
+                for (j in 0 until es.length()) {
+                    val e = es.getJSONObject(j)
+                    entriesList += RecordEntry(
+                        color = e.getString("c"),
+                        count = e.optInt("n"),
+                        substitutedFrom = if (e.isNull("s")) null else e.optString("s"),
+                    )
+                }
+                list += ConversionRecord(
                     id = o.optLong("id"),
                     timestamp = o.optLong("ts"),
-                    imageName = o.optString("img"),
-                    color = o.optString("color"),
-                    count = o.optInt("n"),
-                    substitutedFrom = if (o.isNull("sub")) null else o.optString("sub"),
+                    imageName = o.optString("name"),
+                    srcPath = o.optString("src"),
+                    outPath = o.optString("out"),
+                    cols = o.optInt("cols"),
+                    rows = o.optInt("rows"),
+                    totalBeads = o.optInt("total"),
+                    entries = entriesList,
                 )
             }
-            _logs.value = list.sortedByDescending { it.timestamp }
-            nextLogId = (list.maxOfOrNull { it.id } ?: 0L) + 1
+            _records.value = list.sortedByDescending { it.timestamp }
+            nextRecordId = (list.maxOfOrNull { it.id } ?: 0L) + 1
         }
     }
 
@@ -99,19 +128,64 @@ class BeadStore(context: Context) {
         sp.edit().putString("inventory", arr.toString()).apply()
     }
 
-    private fun persistLogs() {
+    private fun persistRecords() {
         val arr = JSONArray()
-        _logs.value.forEach {
+        _records.value.forEach { r ->
+            val es = JSONArray()
+            r.entries.forEach { e ->
+                es.put(JSONObject().apply {
+                    put("c", e.color); put("n", e.count)
+                    put("s", e.substitutedFrom ?: JSONObject.NULL)
+                })
+            }
             arr.put(JSONObject().apply {
-                put("id", it.id); put("ts", it.timestamp); put("img", it.imageName)
-                put("color", it.color); put("n", it.count)
-                put("sub", it.substitutedFrom ?: JSONObject.NULL)
+                put("id", r.id); put("ts", r.timestamp); put("name", r.imageName)
+                put("src", r.srcPath); put("out", r.outPath)
+                put("cols", r.cols); put("rows", r.rows)
+                put("total", r.totalBeads); put("entries", es)
             })
         }
-        sp.edit().putString("logs", arr.toString()).apply()
+        sp.edit().putString("records", arr.toString()).apply()
     }
 
-    // ---- 与原 DAO 等价的接口 ---------------------------------------------
+    // ---- 图片存取 --------------------------------------------------------
+    private fun imagesDir(): File =
+        File(context.filesDir, "records").apply { if (!isDirectory) mkdirs() }
+
+    /**
+     * 把一张图存进私有目录，返回绝对路径。
+     * 原图另存一份缩略图，避免把相册里的原图整份复制进来。
+     */
+    fun saveImage(id: Long, kind: String, bmp: Bitmap, maxSide: Int = 720): String {
+        val f = File(imagesDir(), "rec${id}_$kind.png")
+        val scaled = scaleDown(bmp, maxSide)
+        FileOutputStream(f).use { scaled.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        return f.absolutePath
+    }
+
+    private fun scaleDown(bmp: Bitmap, maxSide: Int): Bitmap {
+        val s = bmp.width.coerceAtLeast(bmp.height)
+        if (s <= maxSide) return bmp
+        val k = maxSide.toFloat() / s
+        return Bitmap.createScaledBitmap(
+            bmp, (bmp.width * k).toInt().coerceAtLeast(1),
+            (bmp.height * k).toInt().coerceAtLeast(1), true
+        )
+    }
+
+    fun loadImage(path: String): Bitmap? =
+        if (path.isBlank()) null else BitmapFactory.decodeFile(path)
+
+    /** 删除一条记录及其图片。 */
+    fun deleteRecord(id: Long) {
+        val r = _records.value.firstOrNull { it.id == id } ?: return
+        runCatching { File(r.srcPath).delete() }
+        runCatching { File(r.outPath).delete() }
+        _records.value = _records.value.filterNot { it.id == id }
+        persistRecords()
+    }
+
+    // ---- 与原 DAO 等价的库存接口 ------------------------------------------
     fun getAll(): List<InventoryEntity> = _inventory.value
 
     fun insertAll(items: List<InventoryEntity>) {
@@ -137,14 +211,41 @@ class BeadStore(context: Context) {
         persistInventory()
     }
 
-    fun insertLogs(items: List<UsageLogEntity>) {
-        val withIds = items.map { it.copy(id = nextLogId++) }
-        _logs.value = (withIds + _logs.value).sortedByDescending { it.timestamp }
-        persistLogs()
+    // ---- 记录 ------------------------------------------------------------
+    /** 写入一次转换记录，返回新记录（含已保存的图片路径）。 */
+    fun addRecord(
+        imageName: String,
+        src: Bitmap?,
+        preview: Bitmap,
+        cols: Int,
+        rows: Int,
+        totalBeads: Int,
+        entries: List<RecordEntry>,
+    ): ConversionRecord {
+        val id = nextRecordId++
+        val srcPath = src?.let { saveImage(id, "src", it) } ?: ""
+        val outPath = saveImage(id, "out", preview)
+        val rec = ConversionRecord(
+            id = id,
+            timestamp = System.currentTimeMillis(),
+            imageName = imageName,
+            srcPath = srcPath,
+            outPath = outPath,
+            cols = cols, rows = rows,
+            totalBeads = totalBeads,
+            entries = entries,
+        )
+        _records.value = (listOf(rec) + _records.value).sortedByDescending { it.timestamp }
+        persistRecords()
+        return rec
     }
 
-    fun clearLog() {
-        _logs.value = emptyList()
-        persistLogs()
+    fun clearRecords() {
+        _records.value.forEach {
+            runCatching { File(it.srcPath).delete() }
+            runCatching { File(it.outPath).delete() }
+        }
+        _records.value = emptyList()
+        persistRecords()
     }
 }

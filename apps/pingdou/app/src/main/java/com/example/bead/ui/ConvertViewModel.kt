@@ -28,6 +28,8 @@ data class ConvertUiState(
     val maxDist: Float = 80f,
     val busy: Boolean = false,
     val result: Pixelizer.ConvertResult? = null,
+    /** 转换用的原图，确认时一并存档。 */
+    val srcBitmap: Bitmap? = null,
     val message: String? = null,
 )
 
@@ -83,30 +85,51 @@ class ConvertViewModel(app: Application) : AndroidViewModel(app) {
                     // 4. 渲染预览
                     val preview = Pixelizer.render(alloc.indices, w, h, palette, 16, true)
 
+                    // 统计：需要放的豆子总数 + 透明格数量
+                    var empty = 0
+                    for (i in alloc.indices) if (i == Pixelizer.EMPTY) empty++
+                    val total = alloc.entries.sumOf { it.count }
+
                     Pixelizer.ConvertResult(
                         width = w, height = h,
                         indices = alloc.indices,
                         preview = preview,
                         entries = alloc.entries,
                         shortages = alloc.shortages,
+                        totalBeads = total,
+                        emptyCells = empty,
                     )
                 }
 
-                _state.update { it.copy(busy = false, result = result) }
+                _state.update { it.copy(busy = false, result = result, srcBitmap = srcBmp) }
             } catch (e: Exception) {
                 _state.update { it.copy(busy = false, message = "转换失败：${e.message}") }
             }
         }
     }
 
-    /** 确认扣减库存并写日志 */
+    /** 确认扣减库存，并把原图 + 转换图 + 总豆数存档 */
     fun commit() {
-        val r = _state.value.result ?: return
-        val name = _state.value.imageName.ifBlank { "未命名" }
+        val st = _state.value
+        val r = st.result ?: return
+        val name = st.imageName.ifBlank { "未命名" }
         viewModelScope.launch {
-            repo.applyUsage(name, r.entries)
-            _state.update {
-                it.copy(result = null, message = "已扣减库存并记录用量")
+            try {
+                repo.commitConversion(
+                    imageName = name,
+                    src = st.srcBitmap,
+                    preview = r.preview,
+                    cols = r.width,
+                    rows = r.height,
+                    totalBeads = r.totalBeads,
+                    entries = r.entries,
+                )
+                val extra = if (r.emptyCells > 0) "（跳过 ${r.emptyCells} 个透明格）" else ""
+                _state.update {
+                    it.copy(result = null, message = "已扣减并记录：共 ${r.totalBeads} 颗$extra")
+                }
+            } catch (e: Exception) {
+                _state.update { it.copy(message = "记录失败：${e.message}") }
             }
         }
     }

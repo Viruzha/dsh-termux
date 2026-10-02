@@ -1,12 +1,21 @@
 package com.example.bead.data
 
+import android.graphics.Bitmap
 import com.example.bead.domain.Pixelizer
 import kotlinx.coroutines.flow.Flow
 
 class BeadRepository(private val dao: BeadStore) {
 
     val inventory: Flow<List<InventoryEntity>> = dao.inventory
-    val logs: Flow<List<UsageLogEntity>> = dao.logs
+
+    /** 历次转换记录（含原图与转换后图片的路径）。 */
+    val records: Flow<List<ConversionRecord>> = dao.records
+
+    fun loadImage(path: String): Bitmap? = dao.loadImage(path)
+
+    fun deleteRecord(id: Long) = dao.deleteRecord(id)
+
+    fun clearRecords() = dao.clearRecords()
 
     /** 首次启动把色板灌进数据库（已存在则忽略） */
     suspend fun ensureSeeded() {
@@ -22,30 +31,41 @@ class BeadRepository(private val dao: BeadStore) {
     suspend fun initAll(n: Int) {
         Palette.colors.forEach { dao.setTotal(it.name, n) }
         dao.resetUsed()
-        dao.clearLog()
+        dao.clearRecords()
     }
 
     suspend fun resetUsed() {
         dao.resetUsed()
-        dao.clearLog()
+        dao.clearRecords()
     }
 
     /** 当前剩余库存快照 {颜色: 剩余} */
     suspend fun snapshot(): Map<String, Int> =
         dao.getAll().associate { it.name to (it.total - it.used) }
 
-    /** 一次性提交本次用量：扣库存 + 写日志 */
-    suspend fun applyUsage(image: String, entries: List<Pixelizer.UsageEntry>) {
-        val now = System.currentTimeMillis()
+    /**
+     * 一次性提交本次转换：扣库存 + 存档（原图、转换图、总豆数、分色明细）。
+     *
+     * 图片存进应用私有目录，记录里只留路径 —— 不然 JSON 会被 base64 撑爆。
+     */
+    suspend fun commitConversion(
+        imageName: String,
+        src: Bitmap?,
+        preview: Bitmap,
+        cols: Int,
+        rows: Int,
+        totalBeads: Int,
+        entries: List<Pixelizer.UsageEntry>,
+    ): ConversionRecord {
         entries.forEach { dao.addUsed(it.color, it.count) }
-        dao.insertLogs(entries.map {
-            UsageLogEntity(
-                timestamp = now,
-                imageName = image,
-                color = it.color,
-                count = it.count,
-                substitutedFrom = it.substitutedFrom,
-            )
-        })
+        return dao.addRecord(
+            imageName = imageName,
+            src = src,
+            preview = preview,
+            cols = cols,
+            rows = rows,
+            totalBeads = totalBeads,
+            entries = entries.map { RecordEntry(it.color, it.count, it.substitutedFrom) },
+        )
     }
 }
