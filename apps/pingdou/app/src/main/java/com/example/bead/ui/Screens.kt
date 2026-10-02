@@ -35,6 +35,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.compose.NavHost
@@ -179,6 +180,8 @@ private fun ResultCard(
     onCommit: () -> Unit,
     onDiscard: () -> Unit,
 ) {
+    var fullScreen by remember { mutableStateOf(false) }
+
     Card(Modifier.fillMaxWidth()) {
         Column(
             Modifier.padding(12.dp),
@@ -198,11 +201,28 @@ private fun ResultCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
-            ZoomablePattern(
-                bmp = remember(r) { r.preview.asImageBitmap() },
-                indices = r.indices,
-                cols = r.width,
-                rows = r.height,
+            // 卡片里只放静态预览 —— 这里宽度有限，像素图会小到看不清。
+            // 点一下开全屏查看器，那才是真正用来数格子的界面。
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 300.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .clickable { fullScreen = true },
+                contentAlignment = Alignment.Center,
+            ) {
+                Image(
+                    bitmap = remember(r) { r.preview.asImageBitmap() },
+                    contentDescription = "预览，点开全屏",
+                    modifier = Modifier.fillMaxWidth(),
+                    contentScale = ContentScale.Fit,
+                )
+            }
+            Text(
+                "点图片全屏查看（可缩放、可查色号）",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.primary,
             )
 
             HorizontalDivider()
@@ -251,6 +271,19 @@ private fun ResultCard(
             }
         }
     }
+
+    if (fullScreen) {
+        FullScreenPattern(
+            title = "转换预览",
+            subtitle = "共 ${r.totalBeads} 颗豆　·　${r.width} × ${r.height}" +
+                    if (r.emptyCells > 0) "　·　跳过 ${r.emptyCells} 个透明格" else "",
+            bmp = remember(r) { r.preview.asImageBitmap() },
+            indices = r.indices,
+            cols = r.width,
+            rows = r.height,
+            onClose = { fullScreen = false },
+        )
+    }
 }
 
 /**
@@ -263,108 +296,178 @@ private fun ResultCard(
  * 坐标换算的关键：图像用固定尺寸铺满，**不用 ContentScale.Fit**
  * （Fit 会留黑边，点按坐标就对不上了）。这样内容坐标与图像坐标是线性关系。
  */
+/**
+ * 可缩放、可点按取色的像素图。
+ *
+ * 在**给定空间内等比适配**：宽、高两个方向各算一个缩放比，取小的那个
+ * （否则宽高比不匹配时会溢出）。所以它既能塞进卡片，也能铺满全屏。
+ *
+ * 坐标换算的关键：图像用精确尺寸铺满、**不用 `ContentScale.Fit`** ——
+ * Fit 会留黑边，点按坐标就对不上了。
+ */
 @Composable
 private fun ZoomablePattern(
+    bmp: ImageBitmap,
+    cols: Int,
+    rows: Int,
+    modifier: Modifier = Modifier,
+    onPick: (Int, Int) -> Unit = { _, _ -> },
+) {
+    var scale by remember { mutableFloatStateOf(1f) }
+    var offset by remember { mutableStateOf(Offset.Zero) }
+
+    BoxWithConstraints(modifier, contentAlignment = Alignment.Center) {
+        val availW = maxWidth
+        val availH = maxHeight
+        val aspect = cols.toFloat() / rows.toFloat()
+        val w: Dp
+        val h: Dp
+        if (availH <= 0.dp || availW / availH > aspect) {
+            h = availH; w = availH * aspect
+        } else {
+            w = availW; h = availW / aspect
+        }
+
+        Image(
+            bitmap = bmp,
+            contentDescription = "像素图，可缩放",
+            modifier = Modifier
+                .size(w, h)
+                .graphicsLayer(scaleX = scale, scaleY = scale)
+                .graphicsLayer(translationX = offset.x, translationY = offset.y)
+                // ⚠️ 缩放与点按必须在**同一个** pointerInput 里处理。
+                // 拆成两个 pointerInput 时，detectTransformGestures 会吃掉事件，
+                // 后面的 detectTapGestures 收不到 —— 实测点按完全没反应。
+                .pointerInput(cols, rows) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false)
+                        val downPos = down.position
+                        var moved = false
+
+                        while (true) {
+                            val ev = awaitPointerEvent()
+                            val ch = ev.changes.firstOrNull { it.id == down.id }
+                            if (ch == null || !ch.pressed) break
+
+                            val zoom = ev.calculateZoom()
+                            val pan = ev.calculatePan()
+                            if (zoom != 1f || pan != Offset.Zero) {
+                                if (!moved &&
+                                    (pan.getDistance() > viewConfiguration.touchSlop || zoom != 1f)
+                                ) moved = true
+                                if (moved) {
+                                    val ns = (scale * zoom).coerceIn(1f, 16f)
+                                    scale = ns
+                                    offset = if (ns <= 1f) Offset.Zero else offset + pan
+                                    ev.changes.forEach { it.consume() }
+                                }
+                            }
+                        }
+
+                        // 没拖动过 → 当作点按
+                        if (!moved) {
+                            val cx = (downPos.x / size.width * cols).toInt()
+                            val cy = (downPos.y / size.height * rows).toInt()
+                            if (cx in 0 until cols && cy in 0 until rows) onPick(cx, cy)
+                        }
+                    }
+                },
+        )
+    }
+}
+
+/** 把某一格的查色结果渲染成一行。 */
+@Composable
+private fun PickedLabel(cell: Pair<Int, Int>?, indices: IntArray, cols: Int, rows: Int) {
+    if (cell == null) {
+        Text(
+            "双指缩放看细节 · 点某一格查颜色",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        return
+    }
+    val ci = if (cell.first in 0 until cols && cell.second in 0 until rows)
+        indices[cell.second * cols + cell.first] else Pixelizer.EMPTY
+    val valid = ci in Palette.colors.indices
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            Modifier
+                .size(18.dp)
+                .clip(RoundedCornerShape(3.dp))
+                .background(
+                    if (valid) Color(Palette.colors[ci].argb())
+                    else MaterialTheme.colorScheme.outline
+                )
+        )
+        Spacer(Modifier.width(8.dp))
+        Text(
+            if (valid) "第 ${cell.first + 1} 列 ${cell.second + 1} 行：${Palette.colors[ci].name}"
+            else "第 ${cell.first + 1} 列 ${cell.second + 1} 行：透明（不放豆）",
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium,
+        )
+    }
+}
+
+/**
+ * 全屏查看器。
+ *
+ * 卡片的宽度会把像素图压得很小，实际对着屏幕数格子时根本看不清 ——
+ * 所以单独给一个铺满屏幕的查看界面，顶栏给标题、底栏常驻显示选中的格子。
+ */
+@Composable
+private fun FullScreenPattern(
+    title: String,
+    subtitle: String,
     bmp: ImageBitmap,
     indices: IntArray,
     cols: Int,
     rows: Int,
-    maxHeight: Dp = 460.dp,
+    onClose: () -> Unit,
 ) {
-    var scale by remember { mutableFloatStateOf(1f) }
-    var offset by remember { mutableStateOf(Offset.Zero) }
     var picked by remember { mutableStateOf<Pair<Int, Int>?>(null) }
 
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        BoxWithConstraints(
-            Modifier
-                .fillMaxWidth()
-                .heightIn(max = maxHeight)
-                .clip(RoundedCornerShape(8.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant),
-            contentAlignment = Alignment.Center,
-        ) {
-            val w = maxWidth
-            val h = w * rows / cols
+    Dialog(
+        onDismissRequest = onClose,
+        // 少了这个，Dialog 会按平台默认宽度（约 90%）收窄，白费屏幕
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Surface(Modifier.fillMaxSize(), color = Color(0xFF0B0F14)) {
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .statusBarsPadding()
+                    .navigationBarsPadding()
+            ) {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(title, fontWeight = FontWeight.Bold, color = Color.White)
+                        Text(
+                            subtitle,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0xFF9AA7B4),
+                        )
+                    }
+                    TextButton(onClick = onClose) { Text("关闭") }
+                }
 
-            Image(
-                bitmap = bmp,
-                contentDescription = "像素图，可缩放",
-                modifier = Modifier
-                    .size(w, h)
-                    .graphicsLayer(scaleX = scale, scaleY = scale)
-                    .graphicsLayer(translationX = offset.x, translationY = offset.y)
-                    // ⚠️ 缩放与点按必须在**同一个** pointerInput 里处理。
-                    // 拆成两个 pointerInput 时，detectTransformGestures 会吃掉事件，
-                    // 后面的 detectTapGestures 收不到 —— 实测点按完全没反应。
-                    .pointerInput(cols, rows) {
-                        awaitEachGesture {
-                            val down = awaitFirstDown(requireUnconsumed = false)
-                            val downPos = down.position
-                            var moved = false
+                ZoomablePattern(
+                    bmp = bmp,
+                    cols = cols,
+                    rows = rows,
+                    modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 6.dp),
+                    onPick = { x, y -> picked = x to y },
+                )
 
-                            while (true) {
-                                val ev = awaitPointerEvent()
-                                val ch = ev.changes.firstOrNull { it.id == down.id }
-                                if (ch == null || !ch.pressed) break
-
-                                val zoom = ev.calculateZoom()
-                                val pan = ev.calculatePan()
-                                if (zoom != 1f || pan != Offset.Zero) {
-                                    if (!moved &&
-                                        (pan.getDistance() > viewConfiguration.touchSlop || zoom != 1f)
-                                    ) moved = true
-                                    if (moved) {
-                                        val ns = (scale * zoom).coerceIn(1f, 12f)
-                                        scale = ns
-                                        offset = if (ns <= 1f) Offset.Zero else offset + pan
-                                        ev.changes.forEach { it.consume() }
-                                    }
-                                }
-                            }
-
-                            // 没拖动过 → 当作点按
-                            if (!moved) {
-                                val cx = (downPos.x / size.width * cols).toInt()
-                                val cy = (downPos.y / size.height * rows).toInt()
-                                picked = if (cx in 0 until cols && cy in 0 until rows)
-                                    cx to cy else null
-                            }
-                        }
-                    },
-            )
-        }
-
-        val p = picked
-        when {
-            p == null -> Text(
-                "双指缩放看细节 · 点某一格查颜色",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            else -> {
-                val ci = if (p.first in 0 until cols && p.second in 0 until rows)
-                    indices[p.second * cols + p.first] else Pixelizer.EMPTY
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        Modifier
-                            .size(18.dp)
-                            .clip(RoundedCornerShape(3.dp))
-                            .background(
-                                if (ci < 0 || ci >= Palette.colors.size)
-                                    MaterialTheme.colorScheme.outline
-                                else Color(Palette.colors[ci].argb())
-                            )
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        if (ci < 0 || ci >= Palette.colors.size)
-                            "第 ${p.first + 1} 列 ${p.second + 1} 行：透明（不放豆）"
-                        else
-                            "第 ${p.first + 1} 列 ${p.second + 1} 行：${Palette.colors[ci].name}",
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Medium,
-                    )
+                Box(
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+                    contentAlignment = Alignment.CenterStart,
+                ) {
+                    PickedLabel(picked, indices, cols, rows)
                 }
             }
         }
@@ -657,39 +760,15 @@ private fun RecordCard(rec: ConversionRecord, vm: InventoryViewModel) {
     }
 
     if (zoomOut && out != null) {
-        Dialog(onDismissRequest = { zoomOut = false }) {
-            Surface(
-                shape = RoundedCornerShape(12.dp),
-                color = MaterialTheme.colorScheme.surface,
-                modifier = Modifier.fillMaxWidth().padding(8.dp),
-            ) {
-                Column(
-                    Modifier.padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            rec.imageName.ifBlank { "未命名" },
-                            Modifier.weight(1f),
-                            fontWeight = FontWeight.Bold,
-                        )
-                        TextButton(onClick = { zoomOut = false }) { Text("关闭") }
-                    }
-                    Text(
-                        "共 ${rec.totalBeads} 颗豆　·　${rec.cols} × ${rec.rows}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    ZoomablePattern(
-                        bmp = remember(rec.id) { out.asImageBitmap() },
-                        indices = remember(rec.id) { rec.indices() },
-                        cols = rec.cols,
-                        rows = rec.rows,
-                        maxHeight = 520.dp,
-                    )
-                }
-            }
-        }
+        FullScreenPattern(
+            title = rec.imageName.ifBlank { "未命名" },
+            subtitle = "共 ${rec.totalBeads} 颗豆　·　${rec.cols} × ${rec.rows}",
+            bmp = remember(rec.id) { out.asImageBitmap() },
+            indices = remember(rec.id) { rec.indices() },
+            cols = rec.cols,
+            rows = rec.rows,
+            onClose = { zoomOut = false },
+        )
     }
 }
 

@@ -173,3 +173,27 @@ Fit 会留黑边，点按坐标就对不上了。
 - 原图缩略图只能看（没有格点信息，查不了色号）
 
 `ZoomablePattern` 重构成接收 `(bmp, indices, cols, rows)`，主界面与历史页共用同一份实现。
+
+## v1.3 全屏查看器
+
+v1.2 的缩放界面被卡片宽度限制住了（最多 460dp），实际对着屏幕数格子时看不清。
+
+现在：**卡片里只放静态预览，点一下开全屏查看器**。
+
+```kotlin
+Dialog(
+    onDismissRequest = onClose,
+    // 少了这个，Dialog 会按平台默认宽度（约 90%）收窄，白费屏幕
+    properties = DialogProperties(usePlatformDefaultWidth = false),
+) { Surface(Modifier.fillMaxSize()) { ... } }
+```
+
+要点：
+
+- **`usePlatformDefaultWidth = false`** —— 否则 Dialog 只占约 90% 宽，做不到真全屏
+- 顶栏放标题与关闭；底栏**常驻**显示选中的格子（不再挤在图片下面）
+- `statusBarsPadding()` + `navigationBarsPadding()`，内容不压到系统栏底下
+- `ZoomablePattern` 重构成在**给定空间内等比适配**（宽高两个方向取小者），
+  所以同一份实现既能塞进卡片、也能铺满全屏；缩放上限提到 16 倍
+
+主界面与历史页共用同一个 `FullScreenPattern`。
