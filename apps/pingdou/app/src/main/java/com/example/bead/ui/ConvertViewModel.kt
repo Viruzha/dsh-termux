@@ -23,7 +23,6 @@ data class ConvertUiState(
     val imageUri: Uri? = null,
     val imageName: String = "",
     val width: Int = 50,
-    val dither: Boolean = false,
     val substitute: Boolean = true,
     val maxDist: Float = 80f,
     val busy: Boolean = false,
@@ -47,7 +46,6 @@ class ConvertViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun setWidth(v: Int) = _state.update { it.copy(width = v.coerceIn(8, 200)) }
-    fun setDither(v: Boolean) = _state.update { it.copy(dither = v) }
     fun setSubstitute(v: Boolean) = _state.update { it.copy(substitute = v) }
     fun setMaxDist(v: Float) = _state.update { it.copy(maxDist = v) }
 
@@ -73,10 +71,12 @@ class ConvertViewModel(app: Application) : AndroidViewModel(app) {
                     // 1. 缩放
                     val pixels = Pixelizer.downsample(srcBmp, w, h)
                     // 2. 匹配色板
-                    val idx = if (s.dither)
-                        Pixelizer.quantizeWithDither(pixels, w, h, palette)
-                    else
-                        Pixelizer.quantize(pixels, palette)
+                    // 只取「最近的调色板颜色」，不做抖动。
+                    // 抖动本意是让渐变更自然，但实测在这个 48 色实物色板上恰恰相反：
+                    // 局部混色误差只改善 ~10 分（38.7→27.5），而相邻格相异率从 3%
+                    // 飙到 29~53% —— 实物拼豆时每一次换色都是真实操作，
+                    // 这个代价远大于收益。详见 README 的 v1.7 说明。
+                    val idx = Pixelizer.quantize(pixels, palette)
                     // 3. 按库存分配
                     val remaining = repo.snapshot()
                     val alloc = Pixelizer.allocate(

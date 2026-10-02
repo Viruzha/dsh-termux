@@ -150,11 +150,6 @@ fun ConvertScreen(vm: ConvertViewModel = viewModel()) {
         )
 
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("抖动（渐变更自然）", Modifier.weight(1f))
-            Switch(checked = state.dither, onCheckedChange = vm::setDither)
-        }
-
-        Row(verticalAlignment = Alignment.CenterVertically) {
             Text("库存不足时用相近色替代", Modifier.weight(1f))
             Switch(checked = state.substitute, onCheckedChange = vm::setSubstitute)
         }

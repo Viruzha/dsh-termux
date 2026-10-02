@@ -17,15 +17,6 @@ object Pixelizer {
     /** 默认透明阈值：格子平均 alpha 低于它就视为透明。 */
     const val DEFAULT_MIN_ALPHA = 128
 
-    /**
-     * 抖动时允许选用的「与原色最大距离」（redmean 距离，与 [colorDist] 同尺度）。
-     *
-     * 这是修「一片灰色里蹦出孤立棕点」的关键：不加限制时误差累积会把工作值
-     * 推得很远，于是选到远处的颜色。实测候选限制在 78 时孤立色斑归零。
-     * 调大＝抖动更"敢"，能还原更强渐变但也更容易出突兀色块。
-     */
-    const val DITHER_MAX_DIST = 78.0
-
     data class UsageEntry(
         val color: String,
         val count: Int,
@@ -144,36 +135,6 @@ object Pixelizer {
     }
 
     /**
-     * 在「与原色 [orig] 的距离不超过 [maxDist]」的候选里，找与 (r,g,b) 最近的。
-     *
-     * 抖动专用：工作值 (r,g,b) 可能因为误差累积而飘离原色很远，
-     * 若不限制候选就会选到风马牛不相及的颜色，形成突兀的孤立色块。
-     * 若一个候选都没有（原色离色板太远），退回全色板查找，保证总有结果。
-     */
-    fun nearestConstrained(
-        r: Int, g: Int, b: Int,
-        palette: List<BeadColor>,
-        orig: BeadColor,
-        maxDist: Double,
-    ): Int {
-        var best = -1
-        var bestD = Double.MAX_VALUE
-        for (i in palette.indices) {
-            val c = palette[i]
-            if (colorDist(orig, c) > maxDist) continue
-            val rmean = (r + c.r) * 0.5
-            val dr = (r - c.r).toDouble()
-            val dg = (g - c.g).toDouble()
-            val db = (b - c.b).toDouble()
-            val d = (2 + rmean / 256.0) * dr * dr +
-                    4 * dg * dg +
-                    (2 + (255 - rmean) / 256.0) * db * db
-            if (d < bestD) { bestD = d; best = i }
-        }
-        return if (best >= 0) best else nearestIndex(r, g, b, palette)
-    }
-
-    /**
      * 取某一格的调色板下标（放大后点按查颜色用）。
      * 越界或透明格都返回 [EMPTY]。
      */
@@ -196,62 +157,7 @@ object Pixelizer {
     }
 
     // ---------------------------------------------------------
-    // ③ Floyd–Steinberg 抖动（渐变自然）
-    // ---------------------------------------------------------
-    fun quantizeWithDither(
-        pixels: IntArray, w: Int, h: Int, palette: List<BeadColor>,
-        minAlpha: Int = DEFAULT_MIN_ALPHA,
-    ): IntArray {
-        val buf = FloatArray(w * h * 3)
-        for (i in pixels.indices) {
-            val p = pixels[i]
-            buf[i * 3] = ((p ushr 16) and 0xFF).toFloat()
-            buf[i * 3 + 1] = ((p ushr 8) and 0xFF).toFloat()
-            buf[i * 3 + 2] = (p and 0xFF).toFloat()
-        }
-        val out = IntArray(w * h)
-        for (y in 0 until h) {
-            for (x in 0 until w) {
-                val idx = y * w + x
-                // 透明格：不匹配颜色、也不参与误差扩散
-                if (((pixels[idx] ushr 24) and 0xFF) < minAlpha) { out[idx] = EMPTY; continue }
-                val r = buf[idx * 3].toInt().coerceIn(0, 255)
-                val g = buf[idx * 3 + 1].toInt().coerceIn(0, 255)
-                val b = buf[idx * 3 + 2].toInt().coerceIn(0, 255)
-
-                // 只在「与原色距离不超过 DITHER_MAX_DIST」的候选里挑。
-                // 不加这个限制时，误差累积会把工作值推得很远，一片灰色里就会
-                // 蹦出棕色/咖色的孤立斑点 —— 实测每 3~4 格一个、非常规律，
-                // 看起来像噪点而不是渐变。加上之后实测孤立色斑 363 → 0，
-                // 而且平均色偏反而更小（59 → 52），因为误差不再浪费在够不着的颜色上。
-                val p0 = pixels[idx]
-                val orig = BeadColor("", (p0 ushr 16) and 0xFF, (p0 ushr 8) and 0xFF, p0 and 0xFF)
-                val pi = nearestConstrained(r, g, b, palette, orig, DITHER_MAX_DIST)
-                out[idx] = pi
-                val c = palette[pi]
-                val er = buf[idx * 3] - c.r
-                val eg = buf[idx * 3 + 1] - c.g
-                val eb = buf[idx * 3 + 2] - c.b
-
-                if (x + 1 < w) addErr(buf, y * w + x + 1, er * 7 / 16, eg * 7 / 16, eb * 7 / 16)
-                if (y + 1 < h) {
-                    if (x > 0) addErr(buf, (y + 1) * w + x - 1, er * 3 / 16, eg * 3 / 16, eb * 3 / 16)
-                    addErr(buf, (y + 1) * w + x, er * 5 / 16, eg * 5 / 16, eb * 5 / 16)
-                    if (x + 1 < w) addErr(buf, (y + 1) * w + x + 1, er / 16, eg / 16, eb / 16)
-                }
-            }
-        }
-        return out
-    }
-
-    private fun addErr(buf: FloatArray, idx: Int, dr: Float, dg: Float, db: Float) {
-        buf[idx * 3] += dr
-        buf[idx * 3 + 1] += dg
-        buf[idx * 3 + 2] += db
-    }
-
-    // ---------------------------------------------------------
-    // ④ 按库存分配颜色（核心：不够就找相近色替换）
+    // ③ 按库存分配颜色
     // ---------------------------------------------------------
     fun allocate(
         indices: IntArray,
