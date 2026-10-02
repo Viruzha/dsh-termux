@@ -1,5 +1,6 @@
 package com.example.bead.ui
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -25,15 +26,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.toSize
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -47,6 +51,10 @@ import com.example.bead.data.ConversionRecord
 import com.example.bead.data.InventoryEntity
 import com.example.bead.data.Palette
 import com.example.bead.domain.Pixelizer
+import kotlin.math.ceil
+import kotlin.math.floor
+import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 // ------------------------------------------------------------
@@ -277,7 +285,6 @@ private fun ResultCard(
             title = "转换预览",
             subtitle = "共 ${r.totalBeads} 颗豆　·　${r.width} × ${r.height}" +
                     if (r.emptyCells > 0) "　·　跳过 ${r.emptyCells} 个透明格" else "",
-            bmp = remember(r) { r.preview.asImageBitmap() },
             indices = r.indices,
             cols = r.width,
             rows = r.height,
@@ -289,25 +296,20 @@ private fun ResultCard(
 /**
  * 可缩放、可点按取色的像素图。
  *
- * 实际拼豆时是对着屏幕数格子的，所以需要：
- *  - **双指缩放 + 拖动**：放大到能看清每一格
- *  - **点某一格显示颜色名**：直接告诉你是哪种豆，不用去猜
+ * **刻意不用位图，而是按当前缩放实时绘制每一格。**
  *
- * 坐标换算的关键：图像用固定尺寸铺满，**不用 ContentScale.Fit**
- * （Fit 会留黑边，点按坐标就对不上了）。这样内容坐标与图像坐标是线性关系。
- */
-/**
- * 可缩放、可点按取色的像素图。
+ * 原先的做法是把 `Pixelizer.render` 烤好的位图（16 像素/格）交给 `Image` 显示，
+ * 再叠上 `graphicsLayer` 缩放。结果是放得越大越糊，原因有两层：
  *
- * 在**给定空间内等比适配**：宽、高两个方向各算一个缩放比，取小的那个
- * （否则宽高比不匹配时会溢出）。所以它既能塞进卡片，也能铺满全屏。
+ *  1. `Image` 默认双线性插值，会把相邻像素**混成渐变** —— 而像素画要的是边界分明
+ *  2. 位图里 1 像素宽的**网格线也被一起放大**，16 倍下变成 16 像素粗块
  *
- * 坐标换算的关键：图像用精确尺寸铺满、**不用 `ContentScale.Fit`** ——
- * Fit 会留黑边，点按坐标就对不上了。
+ * 像素画的本质就是一堆彩色方块，直接画就没有分辨率上限，放大多少倍都锐利，
+ * 而且只绘制可见范围内的格子，放大后反而更快。
  */
 @Composable
 private fun ZoomablePattern(
-    bmp: ImageBitmap,
+    indices: IntArray,
     cols: Int,
     rows: Int,
     modifier: Modifier = Modifier,
@@ -316,63 +318,110 @@ private fun ZoomablePattern(
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
 
-    BoxWithConstraints(modifier, contentAlignment = Alignment.Center) {
-        val availW = maxWidth
-        val availH = maxHeight
-        val aspect = cols.toFloat() / rows.toFloat()
-        val w: Dp
-        val h: Dp
-        if (availH <= 0.dp || availW / availH > aspect) {
-            h = availH; w = availH * aspect
-        } else {
-            w = availW; h = availW / aspect
-        }
+    Canvas(
+        modifier.pointerInput(cols, rows) {
+            awaitEachGesture {
+                val down = awaitFirstDown(requireUnconsumed = false)
+                val downPos = down.position
+                var moved = false
 
-        Image(
-            bitmap = bmp,
-            contentDescription = "像素图，可缩放",
-            modifier = Modifier
-                .size(w, h)
-                .graphicsLayer(scaleX = scale, scaleY = scale)
-                .graphicsLayer(translationX = offset.x, translationY = offset.y)
-                // ⚠️ 缩放与点按必须在**同一个** pointerInput 里处理。
-                // 拆成两个 pointerInput 时，detectTransformGestures 会吃掉事件，
-                // 后面的 detectTapGestures 收不到 —— 实测点按完全没反应。
-                .pointerInput(cols, rows) {
-                    awaitEachGesture {
-                        val down = awaitFirstDown(requireUnconsumed = false)
-                        val downPos = down.position
-                        var moved = false
+                while (true) {
+                    val ev = awaitPointerEvent()
+                    val ch = ev.changes.firstOrNull { it.id == down.id }
+                    if (ch == null || !ch.pressed) break
 
-                        while (true) {
-                            val ev = awaitPointerEvent()
-                            val ch = ev.changes.firstOrNull { it.id == down.id }
-                            if (ch == null || !ch.pressed) break
-
-                            val zoom = ev.calculateZoom()
-                            val pan = ev.calculatePan()
-                            if (zoom != 1f || pan != Offset.Zero) {
-                                if (!moved &&
-                                    (pan.getDistance() > viewConfiguration.touchSlop || zoom != 1f)
-                                ) moved = true
-                                if (moved) {
-                                    val ns = (scale * zoom).coerceIn(1f, 16f)
-                                    scale = ns
-                                    offset = if (ns <= 1f) Offset.Zero else offset + pan
-                                    ev.changes.forEach { it.consume() }
-                                }
-                            }
-                        }
-
-                        // 没拖动过 → 当作点按
-                        if (!moved) {
-                            val cx = (downPos.x / size.width * cols).toInt()
-                            val cy = (downPos.y / size.height * rows).toInt()
-                            if (cx in 0 until cols && cy in 0 until rows) onPick(cx, cy)
+                    val zoom = ev.calculateZoom()
+                    val pan = ev.calculatePan()
+                    if (zoom != 1f || pan != Offset.Zero) {
+                        if (!moved &&
+                            (pan.getDistance() > viewConfiguration.touchSlop || zoom != 1f)
+                        ) moved = true
+                        if (moved) {
+                            val ns = (scale * zoom).coerceIn(1f, 40f)
+                            scale = ns
+                            offset = if (ns <= 1f) Offset.Zero else offset + pan
+                            ev.changes.forEach { it.consume() }
                         }
                     }
-                },
-        )
+                }
+
+                if (!moved) {
+                    hitCell(downPos, size.toSize(), cols, rows, scale, offset)
+                        ?.let { onPick(it.first, it.second) }
+                }
+            }
+        }
+    ) {
+        drawPattern(indices, cols, rows, scale, offset)
+    }
+}
+
+/** 计算当前布局下：每格边长、以及图案左上角的位置。 */
+private fun patternMetrics(
+    size: Size, cols: Int, rows: Int, scale: Float, offset: Offset,
+): FloatArray {
+    // 在可用空间内等比适配：宽、高两个方向取小的那个
+    val base = min(size.width / cols, size.height / rows)
+    val cell = base * scale
+    val ox = (size.width - cols * cell) / 2f + offset.x
+    val oy = (size.height - rows * cell) / 2f + offset.y
+    return floatArrayOf(cell, ox, oy)
+}
+
+/** 屏幕坐标 → 格子坐标；点到图案外返回 null。 */
+private fun hitCell(
+    pos: Offset, size: Size, cols: Int, rows: Int, scale: Float, offset: Offset,
+): Pair<Int, Int>? {
+    val m = patternMetrics(size, cols, rows, scale, offset)
+    val cell = m[0]
+    if (cell <= 0f) return null
+    val cx = floor((pos.x - m[1]) / cell).toInt()
+    val cy = floor((pos.y - m[2]) / cell).toInt()
+    return if (cx in 0 until cols && cy in 0 until rows) cx to cy else null
+}
+
+private fun DrawScope.drawPattern(
+    indices: IntArray, cols: Int, rows: Int, scale: Float, offset: Offset,
+) {
+    val m = patternMetrics(size, cols, rows, scale, offset)
+    val cell = m[0]
+    val ox = m[1]
+    val oy = m[2]
+    if (cell <= 0f || cols <= 0 || rows <= 0) return
+
+    // 只画可见范围 —— 放大后绝大多数格子都在屏幕外，这一步省掉大量绘制
+    val x0 = max(0, floor(-ox / cell).toInt())
+    val x1 = min(cols - 1, ceil((size.width - ox) / cell).toInt())
+    val y0 = max(0, floor(-oy / cell).toInt())
+    val y1 = min(rows - 1, ceil((size.height - oy) / cell).toInt())
+    if (x0 > x1 || y0 > y1) return
+
+    val light = Color(0xFFF2F2F2)
+    val dark = Color(0xFFE0E0E0)
+    for (y in y0..y1) {
+        for (x in x0..x1) {
+            val ci = indices[y * cols + x]
+            val col = if (ci in Palette.colors.indices) Color(Palette.colors[ci].argb())
+            else if ((x + y) % 2 == 0) light else dark
+            drawRect(col, topLeft = Offset(ox + x * cell, oy + y * cell), size = Size(cell, cell))
+        }
+    }
+
+    // 网格线：格子太小就不画，否则糊成一片反而看不清
+    if (cell >= 6f) {
+        val gridColor = Color(0x33000000)
+        val top = oy + y0 * cell
+        val bottom = oy + (y1 + 1) * cell
+        val left = ox + x0 * cell
+        val right = ox + (x1 + 1) * cell
+        for (x in x0..x1 + 1) {
+            val px = ox + x * cell
+            drawLine(gridColor, Offset(px, top), Offset(px, bottom), strokeWidth = 1f)
+        }
+        for (y in y0..y1 + 1) {
+            val py = oy + y * cell
+            drawLine(gridColor, Offset(left, py), Offset(right, py), strokeWidth = 1f)
+        }
     }
 }
 
@@ -420,7 +469,6 @@ private fun PickedLabel(cell: Pair<Int, Int>?, indices: IntArray, cols: Int, row
 private fun FullScreenPattern(
     title: String,
     subtitle: String,
-    bmp: ImageBitmap,
     indices: IntArray,
     cols: Int,
     rows: Int,
@@ -456,7 +504,7 @@ private fun FullScreenPattern(
                 }
 
                 ZoomablePattern(
-                    bmp = bmp,
+                    indices = indices,
                     cols = cols,
                     rows = rows,
                     modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 6.dp),
@@ -763,7 +811,6 @@ private fun RecordCard(rec: ConversionRecord, vm: InventoryViewModel) {
         FullScreenPattern(
             title = rec.imageName.ifBlank { "未命名" },
             subtitle = "共 ${rec.totalBeads} 颗豆　·　${rec.cols} × ${rec.rows}",
-            bmp = remember(rec.id) { out.asImageBitmap() },
             indices = remember(rec.id) { rec.indices() },
             cols = rec.cols,
             rows = rec.rows,
