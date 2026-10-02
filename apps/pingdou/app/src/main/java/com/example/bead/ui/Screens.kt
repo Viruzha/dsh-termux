@@ -25,18 +25,26 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextMeasurer
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.toSize
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -313,10 +321,12 @@ private fun ZoomablePattern(
     cols: Int,
     rows: Int,
     modifier: Modifier = Modifier,
+    picked: Pair<Int, Int>? = null,
     onPick: (Int, Int) -> Unit = { _, _ -> },
 ) {
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
+    val textMeasurer = rememberTextMeasurer()
 
     Canvas(
         modifier.pointerInput(cols, rows) {
@@ -352,7 +362,7 @@ private fun ZoomablePattern(
             }
         }
     ) {
-        drawPattern(indices, cols, rows, scale, offset)
+        drawPattern(indices, cols, rows, scale, offset, picked, textMeasurer)
     }
 }
 
@@ -382,6 +392,7 @@ private fun hitCell(
 
 private fun DrawScope.drawPattern(
     indices: IntArray, cols: Int, rows: Int, scale: Float, offset: Offset,
+    picked: Pair<Int, Int>?, textMeasurer: TextMeasurer,
 ) {
     val m = patternMetrics(size, cols, rows, scale, offset)
     val cell = m[0]
@@ -423,6 +434,65 @@ private fun DrawScope.drawPattern(
             drawLine(gridColor, Offset(left, py), Offset(right, py), strokeWidth = 1f)
         }
     }
+
+    drawPickedMarker(indices, cols, rows, cell, ox, oy, picked, textMeasurer)
+}
+
+/**
+ * 在**被点的那一格上**直接标出选中位置与色号。
+ *
+ * 原来只把结果写在底部一行，手指在屏幕中间、信息在屏幕底部，对不上号 ——
+ * 误触了也看不出来，对着数格子很容易数错。所以改成三点标记：
+ *
+ *  1. **十字参考线**：顺着行列找位置
+ *  2. **双层描边**（黑在外、白在内）：任何底色上都看得见
+ *  3. **贴着格子的标签**：显示「N列 M行 · 颜色名」
+ */
+private fun DrawScope.drawPickedMarker(
+    indices: IntArray, cols: Int, rows: Int,
+    cell: Float, ox: Float, oy: Float,
+    picked: Pair<Int, Int>?, textMeasurer: TextMeasurer,
+) {
+    val pk = picked ?: return
+    val (pxCol, pyRow) = pk
+    if (pxCol !in 0 until cols || pyRow !in 0 until rows) return
+
+    val tl = Offset(ox + pxCol * cell, oy + pyRow * cell)
+    val cxm = tl.x + cell / 2f
+    val cym = tl.y + cell / 2f
+
+    // 十字线：铺满整个画布，方便一路数过去
+    val guide = Color(0x59FFFFFF)
+    drawLine(guide, Offset(cxm, 0f), Offset(cxm, size.height), strokeWidth = 1f)
+    drawLine(guide, Offset(0f, cym), Offset(size.width, cym), strokeWidth = 1f)
+
+    // 双层描边
+    drawRect(Color(0xE6000000), topLeft = tl, size = Size(cell, cell), style = Stroke(5f))
+    drawRect(Color.White, topLeft = tl, size = Size(cell, cell), style = Stroke(2.5f))
+
+    // 标签
+    val ci = indices[pyRow * cols + pxCol]
+    val name = if (ci in Palette.colors.indices) Palette.colors[ci].name else "透明"
+    val measured = textMeasurer.measure(
+        AnnotatedString("${pxCol + 1} 列 ${pyRow + 1} 行 · $name"),
+        style = TextStyle(color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.Medium),
+    )
+    val padH = 9f
+    val padV = 6f
+    val lw = measured.size.width + padH * 2f
+    val lh = measured.size.height + padV * 2f
+    val lx = (cxm - lw / 2f).coerceIn(4f, (size.width - lw - 4f).coerceAtLeast(4f))
+    val above = tl.y - lh - 10f
+    val ly = if (above >= 4f) above else (tl.y + cell + 10f)
+        .coerceAtMost((size.height - lh - 4f).coerceAtLeast(4f))
+
+    drawRoundRect(
+        Color(0xE6101720),
+        topLeft = Offset(lx, ly),
+        size = Size(lw, lh),
+        cornerRadius = CornerRadius(8f, 8f),
+    )
+    drawText(measured, topLeft = Offset(lx + padH, ly + padV))
 }
 
 /** 把某一格的查色结果渲染成一行。 */
@@ -508,6 +578,7 @@ private fun FullScreenPattern(
                     cols = cols,
                     rows = rows,
                     modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 6.dp),
+                    picked = picked,
                     onPick = { x, y -> picked = x to y },
                 )
 
